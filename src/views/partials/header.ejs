@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= typeof title !== "undefined" ? title : t("app.title") %></title>
+  <link rel="stylesheet" href="/public/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">in<span>Scheduler</span></a>
+    <nav>
+      <% if (currentUser) { %>
+        <a href="/dashboard"><%= t("nav.dashboard") %></a>
+        <a href="/posts"><%= t("nav.posts") %></a>
+        <a href="/posts/new"><%= t("nav.newpost") %></a>
+        <form action="/auth/logout" method="post" class="inline">
+          <button type="submit" class="link-btn"><%= t("nav.logout") %></button>
+        </form>
+      <% } else { %>
+        <a href="/auth/login"><%= t("nav.login") %></a>
+        <a href="/auth/register"><%= t("nav.signup") %></a>
+      <% } %>
+      <select class="lang-selector" onchange="window.location = '?lang=' + this.value">
+        <% Object.entries(languages).forEach(([code, label]) => { %>
+          <option value="<%= code %>" <%= code === lang ? "selected" : "" %>><%= label %></option>
+        <% }) %>
+      </select>
+    </nav>
+  </header>
+  <main class="container">

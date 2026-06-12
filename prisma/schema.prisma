@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  linkedinAccount LinkedInAccount?
+  scheduledPosts  ScheduledPost[]
+}
+
+model LinkedInAccount {
+  id                     String    @id @default(uuid())
+  userId                 String    @unique
+  linkedinPersonUrn      String?
+  linkedinDisplayName    String?
+  accessTokenEncrypted   String
+  refreshTokenEncrypted  String?
+  tokenExpiresAt         DateTime?
+  refreshExpiresAt       DateTime?
+  scopes                 String[]
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ScheduledPost {
+  id                String      @id @default(uuid())
+  userId            String
+  linkedinAccountId String?
+  authorUrn         String
+  targetType        TargetType  @default(PERSONAL_PROFILE)
+  body              String
+  mediaUrl          String?
+  mediaType         MediaType?
+  uploadedFiles     UploadedFile[]
+  scheduledAt       DateTime
+  timezone          String
+  language          String      @default("en")
+  status            PostStatus  @default(SCHEDULED)
+  linkedinPostUrn   String?
+  errorMessage      String?
+  lockedAt          DateTime?
+  publishedAt       DateTime?
+  retryCount        Int         @default(0)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@index([userId])
+}
+
+model UploadedFile {
+  id              String   @id @default(uuid())
+  scheduledPostId String
+  url             String
+  filename        String
+  mimeType        String
+  size            Int
+  createdAt       DateTime @default(now())
+
+  scheduledPost ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledPostId])
+}
+
+model PublishLog {
+  id              String   @id @default(uuid())
+  scheduledPostId String
+  status          String
+  message         String?
+  payload         Json?
+  response        Json?
+  createdAt       DateTime @default(now())
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+enum TargetType {
+  PERSONAL_PROFILE
+  COMPANY_PAGE
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}

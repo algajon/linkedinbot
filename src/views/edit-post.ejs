@@ -1,0 +1,82 @@
+<%- include("partials/header") %>
+
+<h1>Edit post</h1>
+<p class="muted">Current status: <span class="badge badge-<%= post.status.toLowerCase() %>"><%= post.status %></span></p>
+
+<% if (errors.length) { %>
+  <ul class="alert error">
+    <% errors.forEach((e) => { %><li><%= e %></li><% }) %>
+  </ul>
+<% } %>
+
+<form action="/posts/<%= post.id %>" method="post" class="post-form" data-max="<%= maxLength %>">
+  <div class="post-form-grid">
+    <div class="editor">
+      <%- include("partials/ai-panel") %>
+      <label>
+        Post content
+        <textarea name="body" rows="10" maxlength="<%= maxLength %>" required><%= values.body %></textarea>
+      </label>
+      <p class="char-count"><span id="char-current"><%= values.body.length %></span> / <%= maxLength %></p>
+
+      <div class="schedule-row">
+        <label>
+          Date
+          <input type="date" name="date" value="<%= values.date %>" required />
+        </label>
+        <label>
+          Time
+          <input type="time" name="time" value="<%= values.time %>" required />
+        </label>
+        <label>
+          Timezone
+          <select name="timezone" required>
+            <% timezones.forEach((tz) => { %>
+              <option value="<%= tz %>" <%= tz === values.timezone ? "selected" : "" %>><%= tz %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+
+      <div class="cta-row">
+        <button type="submit" class="btn primary">Save changes</button>
+        <a href="/posts" class="btn">Back</a>
+      </div>
+    </div>
+
+    <aside class="preview">
+      <h3>Preview</h3>
+      <div class="preview-card">
+        <div class="preview-author">Your LinkedIn profile</div>
+        <div id="preview-body" class="preview-body"><%= values.body %></div>
+      </div>
+    </aside>
+  </div>
+</form>
+
+<% const postFiles = (typeof files !== "undefined" && files) ? files : []; %>
+<section class="card images-card" id="images-card" data-post-id="<%= post.id %>">
+  <h3>Images <span class="muted">(JPEG, PNG, WebP — max 5 MB each)</span></h3>
+  <p class="muted">Attached images are published with this post to LinkedIn.</p>
+
+  <ul id="image-list" class="image-grid">
+    <% postFiles.forEach((f) => { %>
+      <li class="image-item" data-file-id="<%= f.id %>">
+        <% if (f.mimeType && f.mimeType.indexOf("image/") === 0) { %>
+          <img src="<%= f.url %>" alt="<%= f.filename %>" />
+        <% } else { %>
+          <span class="file-chip"><%= f.filename %></span>
+        <% } %>
+        <button type="button" class="btn small danger remove-image">Remove</button>
+      </li>
+    <% }) %>
+  </ul>
+
+  <div class="upload-row">
+    <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp" />
+    <button type="button" id="image-upload-btn" class="btn">Upload image</button>
+    <span id="upload-status" class="muted" role="status" aria-live="polite"></span>
+  </div>
+</section>
+
+<%- include("partials/footer") %>

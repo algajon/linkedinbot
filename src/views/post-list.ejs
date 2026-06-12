@@ -1,0 +1,66 @@
+<%- include("partials/header") %>
+
+<div class="list-head">
+  <h1>Posts</h1>
+  <a class="btn primary" href="/posts/new">New post</a>
+</div>
+
+<nav class="filters">
+  <% const tabs = [["", "All"], ["SCHEDULED", "Scheduled"], ["PUBLISHED", "Published"], ["FAILED", "Failed"], ["CANCELED", "Canceled"]]; %>
+  <% tabs.forEach(([value, label]) => { %>
+    <a href="/posts<%= value ? "?status=" + value : "" %>" class="filter <%= filter === value ? "active" : "" %>"><%= label %></a>
+  <% }) %>
+</nav>
+
+<% if (posts.length === 0) { %>
+  <p class="muted">No posts found.</p>
+<% } else { %>
+  <table class="post-table">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Content</th>
+        <th>Scheduled</th>
+        <th>Timezone</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% posts.forEach((p) => { %>
+        <tr>
+          <td><span class="badge badge-<%= p.status.toLowerCase() %>"><%= p.status %></span></td>
+          <td class="cell-body">
+            <%= p.body.slice(0, 100) %><%= p.body.length > 100 ? "…" : "" %>
+            <% if (p.status === "FAILED" && p.errorMessage) { %>
+              <div class="error-msg"><%= p.errorMessage %></div>
+            <% } %>
+          </td>
+          <td><%= formatInZone(p.scheduledAt, p.timezone) %></td>
+          <td><%= p.timezone %></td>
+          <td class="row-actions">
+            <% if (["SCHEDULED", "DRAFT", "FAILED"].includes(p.status)) { %>
+              <a href="/posts/<%= p.id %>/edit" class="btn small">Edit</a>
+            <% } %>
+            <% if (p.status === "FAILED") { %>
+              <form action="/posts/<%= p.id %>/retry" method="post" class="inline">
+                <button type="submit" class="btn small">Retry</button>
+              </form>
+            <% } %>
+            <% if (["SCHEDULED", "DRAFT"].includes(p.status)) { %>
+              <form action="/posts/<%= p.id %>/cancel" method="post" class="inline" onsubmit="return confirm('Cancel this post?');">
+                <button type="submit" class="btn small danger">Cancel</button>
+              </form>
+            <% } %>
+            <% if (p.status !== "PUBLISHING") { %>
+              <form action="/posts/<%= p.id %>/delete" method="post" class="inline" onsubmit="return confirm('Delete this post permanently?');">
+                <button type="submit" class="btn small ghost">Delete</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include("partials/footer") %>

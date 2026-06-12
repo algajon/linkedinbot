@@ -1,0 +1,24 @@
+<%- include("partials/header") %>
+
+<section class="auth-card">
+  <h1>Create account</h1>
+  <% if (error) { %><p class="alert error"><%= error %></p><% } %>
+  <form action="/auth/register" method="post" class="stack">
+    <label>
+      Name <span class="muted">(optional)</span>
+      <input type="text" name="name" autocomplete="name" />
+    </label>
+    <label>
+      Email
+      <input type="email" name="email" value="<%= email %>" required autocomplete="email" />
+    </label>
+    <label>
+      Password <span class="muted">(min 8 characters)</span>
+      <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <button type="submit" class="btn primary">Create account</button>
+  </form>
+  <p class="muted">Already have an account? <a href="/auth/login">Log in</a>.</p>
+</section>
+
+<%- include("partials/footer") %>

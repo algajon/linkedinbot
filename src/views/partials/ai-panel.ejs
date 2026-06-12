@@ -1,0 +1,32 @@
+<% if (aiEnabled) { %>
+  <div class="ai-panel">
+    <h3>✨ Generate with AI</h3>
+    <label>
+      What should the post be about?
+      <textarea id="ai-topic" rows="2" placeholder="e.g. three lessons from scaling our engineering team to 50 people"></textarea>
+    </label>
+    <div class="ai-controls">
+      <label>
+        Tone of voice
+        <select id="ai-tone">
+          <% Object.entries(tonePresets).forEach(([key, t]) => { %>
+            <option value="<%= key %>"><%= t.label %></option>
+          <% }) %>
+          <option value="__custom__">Custom…</option>
+        </select>
+      </label>
+      <label>
+        Audience <span class="muted">(optional)</span>
+        <input id="ai-audience" type="text" placeholder="e.g. early-stage founders" />
+      </label>
+    </div>
+    <label id="ai-custom-wrap" hidden>
+      Custom tone
+      <input id="ai-custom-tone" type="text" placeholder="Describe the voice — e.g. witty, irreverent, a little contrarian" />
+    </label>
+    <div class="ai-actions">
+      <button type="button" id="ai-generate" class="btn primary">Generate draft</button>
+      <span id="ai-status" class="muted" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+<% } %>

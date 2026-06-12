@@ -1,0 +1,60 @@
+<%- include("partials/header") %>
+
+<h1>New post</h1>
+
+<% if (!linkedinReady) { %>
+  <p class="alert error">
+    You need a connected LinkedIn account before scheduling.
+    <a href="/auth/linkedin">Connect LinkedIn</a>.
+  </p>
+<% } %>
+
+<% if (errors.length) { %>
+  <ul class="alert error">
+    <% errors.forEach((e) => { %><li><%= e %></li><% }) %>
+  </ul>
+<% } %>
+
+<form action="/posts" method="post" class="post-form" data-max="<%= maxLength %>">
+  <div class="post-form-grid">
+    <div class="editor">
+      <%- include("partials/ai-panel") %>
+      <label>
+        Post content
+        <textarea name="body" rows="10" maxlength="<%= maxLength %>" required><%= values.body %></textarea>
+      </label>
+      <p class="char-count"><span id="char-current"><%= values.body.length %></span> / <%= maxLength %></p>
+
+      <div class="schedule-row">
+        <label>
+          Date
+          <input type="date" name="date" value="<%= values.date %>" required />
+        </label>
+        <label>
+          Time
+          <input type="time" name="time" value="<%= values.time %>" required />
+        </label>
+        <label>
+          Timezone
+          <select name="timezone" required>
+            <% timezones.forEach((tz) => { %>
+              <option value="<%= tz %>" <%= tz === values.timezone ? "selected" : "" %>><%= tz %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+
+      <button type="submit" class="btn primary" <%= linkedinReady ? "" : "disabled" %>>Schedule post</button>
+    </div>
+
+    <aside class="preview">
+      <h3>Preview</h3>
+      <div class="preview-card">
+        <div class="preview-author">Your LinkedIn profile</div>
+        <div id="preview-body" class="preview-body"><%= values.body %></div>
+      </div>
+    </aside>
+  </div>
+</form>
+
+<%- include("partials/footer") %>

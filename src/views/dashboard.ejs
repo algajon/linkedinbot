@@ -1,0 +1,87 @@
+<%- include("partials/header") %>
+
+<h1>Dashboard</h1>
+
+<% if (flash.connected) { %><p class="alert success">LinkedIn account connected.</p><% } %>
+<% if (flash.disconnected) { %><p class="alert info">LinkedIn account disconnected.</p><% } %>
+<% if (flash.linkedinError) { %><p class="alert error">LinkedIn error: <%= flash.linkedinError %></p><% } %>
+
+<section class="card linkedin-status">
+  <h3>LinkedIn connection</h3>
+  <% if (linkedinAccount) { %>
+    <p class="connected">
+      ✅ Connected<% if (linkedinAccount.linkedinDisplayName) { %> as <strong><%= linkedinAccount.linkedinDisplayName %></strong><% } %>.
+    </p>
+    <% if (!linkedinAccount.linkedinPersonUrn) { %>
+      <p class="alert error">No member URN was captured — reconnect to enable posting.</p>
+    <% } %>
+    <form action="/auth/linkedin/disconnect" method="post" class="inline">
+      <button type="submit" class="btn danger">Disconnect</button>
+    </form>
+  <% } else { %>
+    <p>Connect your LinkedIn account to start scheduling posts.</p>
+    <a class="btn primary" href="/auth/linkedin">Connect LinkedIn</a>
+  <% } %>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h3>Upcoming</h3>
+    <% if (upcoming.length === 0) { %>
+      <p class="muted">No upcoming posts. <a href="/posts/new">Schedule one →</a></p>
+    <% } else { %>
+      <ul class="post-mini-list">
+        <% upcoming.forEach((p) => { %>
+          <li>
+            <span class="badge badge-<%= p.status.toLowerCase() %>"><%= p.status %></span>
+            <span class="when"><%= formatInZone(p.scheduledAt, p.timezone) %> (<%= p.timezone %>)</span>
+            <span class="excerpt"><%= p.body.slice(0, 80) %><%= p.body.length > 80 ? "…" : "" %></span>
+            <a href="/posts/<%= p.id %>/edit">Edit</a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <h3>Recently published</h3>
+    <% if (recentlyPublished.length === 0) { %>
+      <p class="muted">Nothing published yet.</p>
+    <% } else { %>
+      <ul class="post-mini-list">
+        <% recentlyPublished.forEach((p) => { %>
+          <li>
+            <span class="badge badge-published">PUBLISHED</span>
+            <span class="when"><%= formatInZone(p.publishedAt, p.timezone) %></span>
+            <span class="excerpt"><%= p.body.slice(0, 80) %><%= p.body.length > 80 ? "…" : "" %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<section class="card">
+  <h3>Failed — needs attention</h3>
+  <% if (failed.length === 0) { %>
+    <p class="muted">No failed posts. 🎉</p>
+  <% } else { %>
+    <ul class="post-mini-list">
+      <% failed.forEach((p) => { %>
+        <li class="failed-row">
+          <span class="badge badge-failed">FAILED</span>
+          <span class="excerpt"><%= p.body.slice(0, 80) %><%= p.body.length > 80 ? "…" : "" %></span>
+          <span class="error-msg"><%= p.errorMessage %></span>
+          <span class="row-actions">
+            <form action="/posts/<%= p.id %>/retry" method="post" class="inline">
+              <button type="submit" class="btn small">Retry</button>
+            </form>
+            <a href="/posts/<%= p.id %>/edit" class="btn small">Edit</a>
+          </span>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<%- include("partials/footer") %>
