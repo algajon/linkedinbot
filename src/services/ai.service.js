@@ -78,6 +78,34 @@ async function chatCompletion(provider, { messages, temperature = 0.8, maxTokens
   return { content, finishReason: data.choices?.[0]?.finish_reason };
 }
 
+// Split a preset's stored sample text into individual exemplar posts.
+export function parseExemplars(sampleText) {
+  if (!sampleText) return [];
+  const parts = /===POST===/.test(sampleText) ? sampleText.split(/===POST===/) : [sampleText];
+  return parts.map((s) => s.trim()).filter((s) => s.length > 40);
+}
+
+// Build a few-shot block of the author's REAL posts for the system prompt.
+// Capped by count and total chars so the prompt stays bounded.
+function exemplarBlock(exemplars, { maxPosts = 10, maxChars = 14000 } = {}) {
+  if (!Array.isArray(exemplars) || !exemplars.length) return "";
+  const chosen = [];
+  let total = 0;
+  for (const ex of exemplars.slice(0, maxPosts)) {
+    if (total + ex.length > maxChars) break;
+    chosen.push(ex);
+    total += ex.length;
+  }
+  if (!chosen.length) return "";
+  return [
+    "STYLE EXAMPLES — these are REAL posts by the author whose voice you must replicate.",
+    "Study and match their hooks, sentence length and rhythm, paragraph breaks, vocabulary, level of formality, emoji and punctuation habits, and how they open and close.",
+    "Write about the NEW topic only — never reuse their specific content, companies, or anecdotes.",
+    "",
+    chosen.map((e, i) => `--- Example ${i + 1} ---\n${e}`).join("\n\n"),
+  ].join("\n");
+}
+
 // When the token cap clips a post mid-sentence, trim back to the last complete
 // sentence so it ends cleanly (only applied when the model was actually cut off).
 function tidyClippedTail(text) {
@@ -172,7 +200,8 @@ export function resolveTone(tone) {
   return preset ? preset.instruction : String(tone).slice(0, 4000);
 }
 
-function buildSystemPrompt(toneInstruction, audience, languageName, targetChars) {
+function buildSystemPrompt(toneInstruction, audience, languageName, targetChars, exemplars) {
+  const block = exemplarBlock(exemplars);
   return [
     "You are an expert LinkedIn ghostwriter. You write original posts that earn engagement without sounding like generic AI content.",
     `Tone of voice: ${toneInstruction}`,
@@ -188,13 +217,14 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars)
       ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible, and finish your final sentence within the budget. Shorter is better than longer; cut every non-essential word.`
       : "",
     `- Never exceed ${MAX_POST_LENGTH} characters.`,
+    block ? `\n${block}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
-export async function generatePost({ topic, tone, audience, language, length } = {}) {
+export async function generatePost({ topic, tone, audience, language, length, exemplars } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -204,7 +234,7 @@ export async function generatePost({ topic, tone, audience, language, length } =
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length));
+  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length), exemplars);
 
   const res = await fetch(COMPLETIONS_URL, {
     method: "POST",
@@ -248,7 +278,7 @@ export async function generatePost({ topic, tone, audience, language, length } =
 
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
-export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length } = {}) {
+export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars } = {}) {
   const provider = sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
@@ -276,6 +306,7 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     `Output the ${n} posts as plain text, separated by a line containing only:`,
     "===POST===",
     "Do not number them and write nothing before the first post or after the last.",
+    exemplarBlock(exemplars) ? `\n${exemplarBlock(exemplars)}` : "",
   ]
     .filter(Boolean)
     .join("\n");

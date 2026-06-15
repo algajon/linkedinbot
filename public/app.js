@@ -68,13 +68,15 @@ function wireLengthToggle(selectId, customId) {
       return;
     }
 
-    // Resolve the tone to send: a saved preset passes its full distilled
-    // instruction; "Custom…" passes the free-text box; built-ins pass their key.
-    let tone;
+    // Resolve the tone to send: a saved preset sends its id (server injects its
+    // instruction + real example posts for few-shot); "Custom…" sends free text;
+    // built-ins send their key.
+    let tone = "";
+    let tonePresetId = "";
     if (toneEl.value === "__custom__") {
       tone = (customToneEl.value || "").trim();
     } else if (toneEl.value.indexOf("saved:") === 0) {
-      tone = toneEl.selectedOptions[0].dataset.instruction || "";
+      tonePresetId = toneEl.value.slice("saved:".length);
     } else {
       tone = toneEl.value;
     }
@@ -90,6 +92,7 @@ function wireLengthToggle(selectId, customId) {
         body: JSON.stringify({
           topic,
           tone,
+          tonePresetId,
           audience: (audienceEl.value || "").trim(),
           language: langEl ? langEl.value : "en",
           length: pickLength("ai-length", "ai-length-custom"),
@@ -348,7 +351,11 @@ function wireLengthToggle(selectId, customId) {
     genRun.addEventListener("click", async function () {
       if (!activeSourceId) { genStatus.textContent = "Pick a source first."; return; }
       let tone = genTone.value;
-      if (tone.indexOf("saved:") === 0) tone = genTone.selectedOptions[0].dataset.instruction || "";
+      let tonePresetId = "";
+      if (tone.indexOf("saved:") === 0) {
+        tonePresetId = tone.slice("saved:".length);
+        tone = "";
+      }
       genRun.disabled = true;
       genStatus.textContent = "Generating drafts…";
       try {
@@ -357,6 +364,7 @@ function wireLengthToggle(selectId, customId) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tone,
+            tonePresetId,
             count: genCount.value,
             audience: (genAudience.value || "").trim(),
             language: (document.getElementById("gen-language") || {}).value || "en",

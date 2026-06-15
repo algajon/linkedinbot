@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { createFromPdf, listSources, getSource, deleteSource, decompressText } from "../services/contentSource.service.js";
-import { generatePostsFromSource } from "../services/ai.service.js";
+import { generatePostsFromSource, parseExemplars } from "../services/ai.service.js";
 import { getActiveRoutine } from "../services/routine.service.js";
 import { normalizePostLanguage } from "../utils/postLanguages.js";
 
@@ -58,9 +58,22 @@ export async function generateFromSource(req, res) {
     const source = await getSource(req.params.id, req.user.id);
     if (!source) return res.status(404).json({ error: "Source not found." });
 
-    const { tone, audience } = req.body || {};
+    const { audience } = req.body || {};
     const count = Math.max(1, Math.min(7, parseInt(req.body?.count, 10) || 3));
     const language = normalizePostLanguage(req.body?.language);
+
+    // Resolve a saved voice preset (instruction + few-shot exemplars) if chosen.
+    let tone = req.body?.tone;
+    let exemplars = [];
+    if (req.body?.tonePresetId) {
+      const preset = await prisma.tonePreset.findFirst({
+        where: { id: req.body.tonePresetId, userId: req.user.id },
+      });
+      if (preset) {
+        tone = preset.instruction;
+        exemplars = parseExemplars(preset.sampleText);
+      }
+    }
 
     const bodies = await generatePostsFromSource({
       sourceText: decompressText(source.extractedText),
@@ -69,6 +82,7 @@ export async function generateFromSource(req, res) {
       count,
       language,
       length: req.body?.length,
+      exemplars,
     });
 
     // Default timezone from the user's active routine, else UTC.
