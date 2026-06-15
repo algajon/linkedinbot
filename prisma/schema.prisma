@@ -17,6 +17,57 @@ model User {
 
   linkedinAccount LinkedInAccount?
   scheduledPosts  ScheduledPost[]
+  tonePresets     TonePreset[]
+  contentSources  ContentSource[]
+  postingRoutines PostingRoutine[]
+}
+
+// A reusable, AI-distilled tone of voice learned from example posts.
+model TonePreset {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  instruction String
+  sampleText  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A document (PDF) whose extracted text feeds AI post generation.
+model ContentSource {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String
+  filename      String?
+  extractedText String
+  charCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A cadence template that suggests publish times at approval.
+model PostingRoutine {
+  id         String   @id @default(uuid())
+  userId     String
+  name       String
+  cadence    String   @default("EVERY_24H") // EVERY_12H | EVERY_24H | WEEKLY
+  timezone   String   @default("UTC")
+  anchorTime String?  // "HH:mm" start for EVERY_12H / EVERY_24H
+  slots      Json?    // WEEKLY: [{ weekday: 0-6, time: "HH:mm" }]
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model LinkedInAccount {
@@ -45,10 +96,13 @@ model ScheduledPost {
   mediaUrl          String?
   mediaType         MediaType?
   uploadedFiles     UploadedFile[]
-  scheduledAt       DateTime
+  scheduledAt       DateTime?
   timezone          String
   language          String      @default("en")
   status            PostStatus  @default(SCHEDULED)
+  origin            String      @default("MANUAL")
+  approvedAt        DateTime?
+  contentSourceId   String?
   linkedinPostUrn   String?
   errorMessage      String?
   lockedAt          DateTime?
@@ -89,6 +143,7 @@ model PublishLog {
 
 enum PostStatus {
   DRAFT
+  PENDING_APPROVAL
   SCHEDULED
   PUBLISHING
   PUBLISHED

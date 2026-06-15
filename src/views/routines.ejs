@@ -1,0 +1,76 @@
+<%- include("partials/header") %>
+
+<h1>Posting routines</h1>
+<p class="muted">A routine defines a posting cadence. Its times are prefilled when you approve drafts in the <a href="/queue">queue</a>, helping you keep a steady, LinkedIn-friendly schedule.</p>
+
+<% if (typeof errors !== "undefined" && errors && errors.length) { %>
+  <ul class="alert error"><% errors.forEach((e) => { %><li><%= e %></li><% }) %></ul>
+<% } %>
+
+<section class="card">
+  <h3>Create a routine</h3>
+  <form action="/routines" method="post" class="stack" id="routine-form">
+    <label>Name<input type="text" name="name" placeholder="e.g. Weekday mornings" required /></label>
+
+    <fieldset class="cadence-set">
+      <legend>Cadence</legend>
+      <label class="radio"><input type="radio" name="cadence" value="EVERY_24H" checked /> Every 24 hours</label>
+      <label class="radio"><input type="radio" name="cadence" value="EVERY_12H" /> Every 12 hours</label>
+      <label class="radio"><input type="radio" name="cadence" value="WEEKLY" /> Weekly (pick days &amp; times)</label>
+    </fieldset>
+
+    <label>
+      Timezone
+      <select name="timezone" required>
+        <% timezones.forEach((tz) => { %>
+          <option value="<%= tz %>" <%= tz === "UTC" ? "selected" : "" %>><%= tz %></option>
+        <% }) %>
+      </select>
+    </label>
+
+    <div id="anchor-block">
+      <label>Start time (for 12h / 24h cadence)<input type="time" name="anchorTime" value="09:00" /></label>
+    </div>
+
+    <div id="weekly-block" hidden>
+      <p class="muted">Add one or more weekly slots. Empty rows are ignored.</p>
+      <% for (let i = 0; i < 5; i++) { %>
+        <div class="schedule-row weekly-row">
+          <label>
+            Day
+            <select name="weekday">
+              <% weekdays.forEach((d, idx) => { %>
+                <option value="<%= idx %>" <%= idx === 1 ? "selected" : "" %>><%= d %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label>Time<input type="time" name="slotTime" /></label>
+        </div>
+      <% } %>
+    </div>
+
+    <button type="submit" class="btn primary">Save routine</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Your routines</h3>
+  <% if (!routines.length) { %>
+    <p class="muted">No routines yet.</p>
+  <% } else { %>
+    <ul class="post-mini-list">
+      <% routines.forEach((r) => { %>
+        <li>
+          <strong><%= r.name %></strong>
+          <span class="badge badge-scheduled"><%= r.cadence %></span>
+          <span class="muted"><%= r.timezone %><% if (r.cadence !== "WEEKLY") { %> · from <%= r.anchorTime %><% } else if (r.slots) { %> · <%= (Array.isArray(r.slots) ? r.slots.length : 0) %> slots/week<% } %></span>
+          <form action="/routines/<%= r.id %>/delete" method="post" class="inline" onsubmit="return confirm('Delete this routine?');">
+            <button type="submit" class="btn small ghost">Delete</button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<%- include("partials/footer") %>

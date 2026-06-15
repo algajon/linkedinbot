@@ -24,7 +24,7 @@ LinkedIn's publishing API.
   voice (OpenAI), then edit before scheduling.
 - Create text-only posts scheduled for a date, time, and timezone.
 - Edit, cancel, retry, and delete posts.
-- Automatic publishing via a one-minute cron job with row locking (no double posts).
+- Automatic publishing via an in-process hourly scheduler with row locking (no double posts).
 - Status tracking: `DRAFT`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`, `FAILED`, `CANCELED`.
 
 ## Local setup
@@ -41,10 +41,19 @@ You need a running PostgreSQL instance and a LinkedIn developer app with the
 `openid profile email w_member_social` scopes and a redirect URI matching
 `LINKEDIN_REDIRECT_URI`.
 
-### Running the publisher locally
+### Running the publisher
+
+The web service runs the publisher **in-process on an hourly timer** when
+`PUBLISH_SCHEDULER=on` (the default in production). No separate cron job is
+needed. Tune the cadence with `PUBLISH_INTERVAL_MINUTES`.
+
+You can also trigger it manually or externally:
 
 ```bash
-npm run publish:due         # one pass; in prod the cron runs this every minute
+npm run publish:due                              # one pass from the CLI
+# or hit the protected endpoint:
+curl -X POST -H "x-internal-cron-secret: $CRON_SECRET" \
+  "$APP_BASE_URL/internal/publish-due-posts"
 ```
 
 ## Environment variables
@@ -87,6 +96,7 @@ the browser.
 
 ## Deployment
 
-`render.yaml` provisions a web service, a Postgres database, and a one-minute
-cron job. Set the `sync: false` secrets in the Render dashboard. The web build
-runs `prisma migrate deploy`.
+`render.yaml` provisions a web service and a Postgres database. The web service
+publishes due posts itself on an hourly timer (`PUBLISH_SCHEDULER=on`), so no
+separate cron service is required. Set the `sync: false` secrets in the Render
+dashboard. The web build runs `prisma migrate deploy`.

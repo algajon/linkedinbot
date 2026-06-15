@@ -4,7 +4,8 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/requireAuth.js";
 import * as posts from "../controllers/posts.controller.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+// Images up to 15 MB so high-resolution photos attach without quality loss.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Two routers exported from one module:
 //   pageRouter — server-rendered HTML pages + browser form actions (mounted at /)
@@ -23,6 +24,7 @@ export const pageRouter = Router();
 pageRouter.use(requireAuth);
 
 pageRouter.get("/dashboard", posts.renderDashboard);
+pageRouter.get("/queue", posts.renderQueue);
 pageRouter.get("/posts", posts.renderList);
 pageRouter.get("/posts/new", posts.renderNew);
 pageRouter.post("/posts", createLimiter, posts.createPost);
@@ -31,6 +33,8 @@ pageRouter.get("/posts/:id/edit", posts.renderEdit);
 pageRouter.post("/posts/:id", posts.updatePost);
 pageRouter.post("/posts/:id/cancel", posts.cancelPost);
 pageRouter.post("/posts/:id/retry", posts.retryPost);
+pageRouter.post("/posts/:id/approve", posts.approvePost);
+pageRouter.post("/posts/:id/reject", posts.rejectPost);
 pageRouter.post("/posts/:id/delete", posts.deletePost);
 
 // ---- JSON API -----------------------------------------------------------
@@ -44,5 +48,7 @@ apiRouter.patch("/:id", posts.updatePost);
 apiRouter.delete("/:id", posts.deletePost);
 apiRouter.post("/:id/cancel", posts.cancelPost);
 apiRouter.post("/:id/retry", posts.retryPost);
+apiRouter.post("/:id/approve", posts.approvePost);
+apiRouter.post("/:id/reject", posts.rejectPost);
 apiRouter.post("/:id/upload", upload.single("file"), posts.uploadFile);
 apiRouter.delete("/:id/files/:fileId", posts.removeFile);

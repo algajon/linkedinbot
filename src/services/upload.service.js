@@ -8,7 +8,7 @@ import { prisma } from "../lib/prisma.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_DIR = path.join(__dirname, "..", "..", "uploads");
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB — full-quality images
 
 // Ensure uploads directory exists
 try {
@@ -25,7 +25,7 @@ export async function readUploadedFileBuffer(filename) {
 
 export async function handleFileUpload(file) {
   if (!file) throw new Error("No file provided.");
-  if (file.size > MAX_FILE_SIZE) throw new Error("File too large (max 5MB).");
+  if (file.size > MAX_FILE_SIZE) throw new Error("File too large (max 15MB).");
 
   const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   if (!allowed.includes(file.mimetype)) {

@@ -1,0 +1,60 @@
+<%- include("partials/header") %>
+
+<h1>Approval queue</h1>
+<p class="muted">AI-drafted posts wait here. Review, set a time, and approve — nothing publishes to LinkedIn until you do.<% if (routine) { %> Times are prefilled from your <strong><%= routine.name %></strong> routine.<% } else { %> <a href="/routines">Set up a routine</a> to prefill suggested times.<% } %></p>
+
+<% if (!items.length) { %>
+  <p class="muted">Nothing to review. <a href="/sources">Generate drafts from a source →</a></p>
+<% } %>
+
+<% items.forEach(({ post, files, suggested }) => { %>
+  <section class="card queue-item">
+    <form action="/posts/<%= post.id %>/approve" method="post" class="stack">
+      <label>
+        Post content
+        <textarea name="body" rows="8" maxlength="<%= maxLength %>"><%= post.body %></textarea>
+      </label>
+
+      <% if (files && files.length) { %>
+        <div class="image-grid">
+          <% files.forEach((f) => { %>
+            <% if (f.mimeType && f.mimeType.indexOf("image/") === 0) { %>
+              <span class="image-item"><img src="<%= f.url %>" alt="<%= f.filename %>" /></span>
+            <% } %>
+          <% }) %>
+        </div>
+      <% } %>
+      <p class="muted"><a href="/posts/<%= post.id %>/edit">Edit body &amp; attach images →</a></p>
+
+      <div class="schedule-row">
+        <label>Date<input type="date" name="date" value="<%= suggested.date %>" required /></label>
+        <label>Time<input type="time" name="time" value="<%= suggested.time %>" required /></label>
+        <label>
+          Timezone
+          <select name="timezone" required>
+            <% timezones.forEach((tz) => { %>
+              <option value="<%= tz %>" <%= tz === suggested.timezone ? "selected" : "" %>><%= tz %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label>
+          Post language
+          <select name="language">
+            <% postLanguages.forEach((l) => { %>
+              <option value="<%= l.code %>" <%= l.code === (post.language || "en") ? "selected" : "" %>><%= l.label %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+
+      <div class="cta-row">
+        <button type="submit" class="btn primary">Approve &amp; schedule</button>
+      </div>
+    </form>
+    <form action="/posts/<%= post.id %>/reject" method="post" class="inline" onsubmit="return confirm('Reject this draft?');">
+      <button type="submit" class="btn small danger">Reject</button>
+    </form>
+  </section>
+<% }) %>
+
+<%- include("partials/footer") %>

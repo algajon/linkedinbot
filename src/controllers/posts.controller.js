@@ -4,8 +4,10 @@ import { formatInZone, defaultLocalParts, COMMON_TIMEZONES } from "../utils/date
 import { DateTime } from "luxon";
 import { retryPost as retryPostService } from "../services/postScheduler.service.js";
 import { linkFileToPost, getPostFiles, removeFileFromPost } from "../services/upload.service.js";
+import { getActiveRoutine, computeUpcomingSlots } from "../services/routine.service.js";
+import { normalizePostLanguage } from "../utils/postLanguages.js";
 
-const EDITABLE_STATUSES = new Set(["DRAFT", "SCHEDULED", "FAILED"]);
+const EDITABLE_STATUSES = new Set(["DRAFT", "PENDING_APPROVAL", "SCHEDULED", "FAILED"]);
 
 function wantsJson(req) {
   return req.baseUrl.startsWith("/api");
@@ -17,7 +19,9 @@ async function findOwnedPost(id, userId) {
 }
 
 // Split a stored UTC scheduledAt back into local date/time parts for forms.
+// Drafts (PENDING_APPROVAL) have no scheduledAt yet — fall back to a default.
 function toLocalParts(post) {
+  if (!post.scheduledAt) return defaultLocalParts(post.timezone || "UTC");
   const dt = DateTime.fromJSDate(post.scheduledAt, { zone: "utc" }).setZone(post.timezone);
   return { date: dt.toFormat("yyyy-LL-dd"), time: dt.toFormat("HH:mm"), timezone: post.timezone };
 }
@@ -86,16 +90,26 @@ export async function renderList(req, res, next) {
   }
 }
 
-export function renderNew(req, res) {
+async function getSavedTones(userId) {
+  return prisma.tonePreset.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
+}
+
+export async function renderNew(req, res, next) {
+  try {
   const tz = req.query.tz || "UTC";
+  const savedTones = await getSavedTones(req.user.id);
   res.render("new-post", {
     title: "New post",
     errors: [],
-    values: { body: "", ...defaultLocalParts(tz) },
+    savedTones,
+    values: { body: "", language: "en", ...defaultLocalParts(tz) },
     timezones: COMMON_TIMEZONES,
     maxLength: MAX_POST_LENGTH,
     linkedinReady: Boolean(req.user.linkedinAccount?.linkedinPersonUrn),
   });
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function renderEdit(req, res, next) {
@@ -111,13 +125,15 @@ export async function renderEdit(req, res, next) {
     }
 
     const files = await getPostFiles(post.id, req.user.id);
+    const savedTones = await getSavedTones(req.user.id);
 
     res.render("edit-post", {
       title: "Edit post",
       errors: [],
       post,
       files,
-      values: { body: post.body, ...toLocalParts(post) },
+      savedTones,
+      values: { body: post.body, language: post.language || "en", ...toLocalParts(post) },
       timezones: COMMON_TIMEZONES,
       maxLength: MAX_POST_LENGTH,
     });
@@ -159,7 +175,7 @@ export async function createPost(req, res, next) {
       return res.status(400).render("new-post", {
         title: "New post",
         errors: [msg],
-        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone },
+        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone, language: req.body.language || "en" },
         timezones: COMMON_TIMEZONES,
         maxLength: MAX_POST_LENGTH,
         linkedinReady: false,
@@ -172,7 +188,7 @@ export async function createPost(req, res, next) {
       return res.status(400).render("new-post", {
         title: "New post",
         errors,
-        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone },
+        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone, language: req.body.language || "en" },
         timezones: COMMON_TIMEZONES,
         maxLength: MAX_POST_LENGTH,
         linkedinReady: true,
@@ -188,6 +204,7 @@ export async function createPost(req, res, next) {
         body: value.body,
         scheduledAt: value.scheduledAt,
         timezone: value.timezone,
+        language: normalizePostLanguage(req.body.language),
         status: "SCHEDULED",
       },
     });
@@ -221,7 +238,7 @@ export async function updatePost(req, res, next) {
         title: "Edit post",
         errors,
         post,
-        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone },
+        values: { body: req.body.body || "", date: req.body.date, time: req.body.time, timezone: req.body.timezone, language: req.body.language || "en" },
         timezones: COMMON_TIMEZONES,
         maxLength: MAX_POST_LENGTH,
       });
@@ -233,6 +250,7 @@ export async function updatePost(req, res, next) {
         body: value.body,
         scheduledAt: value.scheduledAt,
         timezone: value.timezone,
+        language: normalizePostLanguage(req.body.language),
         // Re-arming a previously failed post.
         status: "SCHEDULED",
         errorMessage: null,
@@ -250,7 +268,7 @@ export async function cancelPost(req, res, next) {
   try {
     // Only SCHEDULED/DRAFT posts can be canceled (never PUBLISHED/PUBLISHING).
     const result = await prisma.scheduledPost.updateMany({
-      where: { id: req.params.id, userId: req.user.id, status: { in: ["SCHEDULED", "DRAFT"] } },
+      where: { id: req.params.id, userId: req.user.id, status: { in: ["SCHEDULED", "DRAFT", "PENDING_APPROVAL"] } },
       data: { status: "CANCELED" },
     });
     if (result.count !== 1) {
@@ -316,5 +334,98 @@ export async function removeFile(req, res, next) {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+}
+
+// ---- Approval queue -----------------------------------------------------
+
+export async function renderQueue(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const drafts = await prisma.scheduledPost.findMany({
+      where: { userId, status: "PENDING_APPROVAL" },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Prefill each draft with the next open routine slot (skipping ones already
+    // suggested to earlier drafts in this list).
+    const routine = await getActiveRoutine(userId);
+    const taken = new Set();
+    const slots = routine ? computeUpcomingSlots(routine, drafts.length + 2, { taken }) : [];
+
+    const files = await Promise.all(drafts.map((d) => getPostFiles(d.id, userId)));
+
+    const items = drafts.map((d, i) => {
+      const slot = slots[i];
+      const parts = slot
+        ? toLocalParts({ scheduledAt: slot, timezone: routine.timezone })
+        : defaultLocalParts(d.timezone || "UTC");
+      return { post: d, files: files[i], suggested: parts };
+    });
+
+    res.render("queue", {
+      title: "Approval queue",
+      items,
+      routine,
+      timezones: COMMON_TIMEZONES,
+      maxLength: MAX_POST_LENGTH,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function approvePost(req, res, next) {
+  try {
+    const post = await findOwnedPost(req.params.id, req.user.id);
+    if (!post || post.status !== "PENDING_APPROVAL") {
+      const msg = "Only pending drafts can be approved.";
+      if (wantsJson(req)) return res.status(400).json({ error: msg });
+      return res.status(400).render("error", { title: "Cannot approve", message: msg, status: 400 });
+    }
+
+    // Body may be edited inline at approval; reuse the standard validator.
+    const input = { body: req.body.body ?? post.body, date: req.body.date, time: req.body.time, timezone: req.body.timezone };
+    const { valid, errors, value } = validatePostInput(input);
+    if (!valid) {
+      if (wantsJson(req)) return res.status(400).json({ errors });
+      return res.status(400).render("error", { title: "Cannot approve", message: errors.join(" "), status: 400 });
+    }
+
+    await prisma.scheduledPost.update({
+      where: { id: post.id },
+      data: {
+        body: value.body,
+        scheduledAt: value.scheduledAt,
+        timezone: value.timezone,
+        language: normalizePostLanguage(req.body.language),
+        status: "SCHEDULED",
+        approvedAt: new Date(),
+        errorMessage: null,
+      },
+    });
+
+    if (wantsJson(req)) return res.json({ ok: true });
+    res.redirect("/queue");
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function rejectPost(req, res, next) {
+  try {
+    const result = await prisma.scheduledPost.updateMany({
+      where: { id: req.params.id, userId: req.user.id, status: "PENDING_APPROVAL" },
+      data: { status: "CANCELED" },
+    });
+    if (result.count !== 1) {
+      const msg = "Only pending drafts can be rejected.";
+      if (wantsJson(req)) return res.status(400).json({ error: msg });
+      return res.status(400).render("error", { title: "Cannot reject", message: msg, status: 400 });
+    }
+    if (wantsJson(req)) return res.json({ ok: true });
+    res.redirect("/queue");
+  } catch (err) {
+    next(err);
   }
 }

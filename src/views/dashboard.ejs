@@ -10,7 +10,7 @@
   <h3>LinkedIn connection</h3>
   <% if (linkedinAccount) { %>
     <p class="connected">
-      ✅ Connected<% if (linkedinAccount.linkedinDisplayName) { %> as <strong><%= linkedinAccount.linkedinDisplayName %></strong><% } %>.
+      Connected<% if (linkedinAccount.linkedinDisplayName) { %> as <strong><%= linkedinAccount.linkedinDisplayName %></strong><% } %>.
     </p>
     <% if (!linkedinAccount.linkedinPersonUrn) { %>
       <p class="alert error">No member URN was captured — reconnect to enable posting.</p>
@@ -64,7 +64,7 @@
 <section class="card">
   <h3>Failed — needs attention</h3>
   <% if (failed.length === 0) { %>
-    <p class="muted">No failed posts. 🎉</p>
+    <p class="muted">No failed posts.</p>
   <% } else { %>
     <ul class="post-mini-list">
       <% failed.forEach((p) => { %>

@@ -9,9 +9,13 @@ import authRoutes from "./routes/auth.routes.js";
 import linkedinRoutes from "./routes/linkedin.routes.js";
 import { pageRouter, apiRouter } from "./routes/posts.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
+import tonesRoutes from "./routes/tones.routes.js";
+import { sourcesPageRouter, sourcesApiRouter } from "./routes/sources.routes.js";
+import { routinesPageRouter, routinesApiRouter } from "./routes/routines.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import { TONE_PRESETS } from "./services/ai.service.js";
 import { LANGUAGES, t } from "./utils/i18n.js";
+import { POST_LANGUAGES } from "./utils/postLanguages.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,6 +75,7 @@ export function createApp() {
     // AI generation availability + tone presets, for the editor views.
     res.locals.aiEnabled = Boolean(process.env.OPENAI_API_KEY);
     res.locals.tonePresets = TONE_PRESETS;
+    res.locals.postLanguages = POST_LANGUAGES;
     next();
   });
 
@@ -89,8 +94,13 @@ export function createApp() {
   app.use("/auth", linkedinRoutes);
   app.use("/api/posts", apiRouter);
   app.use("/api/ai", aiRoutes);
+  app.use("/api/tones", tonesRoutes);
+  app.use("/api/sources", sourcesApiRouter);
+  app.use("/api/routines", routinesApiRouter);
   app.use("/internal", internalRoutes);
   app.use("/", pageRouter);
+  app.use("/", sourcesPageRouter);
+  app.use("/", routinesPageRouter);
 
   app.use(notFound);
   app.use(errorHandler);

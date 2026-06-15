@@ -2,6 +2,7 @@
 // Uses fetch directly to avoid adding an SDK dependency.
 
 import { MAX_POST_LENGTH } from "../utils/validation.js";
+import { languageName } from "../utils/postLanguages.js";
 
 const COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -38,13 +39,16 @@ export const TONE_PRESETS = {
 export function resolveTone(tone) {
   if (!tone) return TONE_PRESETS.professional.instruction;
   const preset = TONE_PRESETS[tone];
-  return preset ? preset.instruction : String(tone).slice(0, 500);
+  // Built-in preset key, otherwise free text (incl. distilled saved-tone
+  // instructions, which can be a few paragraphs).
+  return preset ? preset.instruction : String(tone).slice(0, 4000);
 }
 
-function buildSystemPrompt(toneInstruction, audience) {
+function buildSystemPrompt(toneInstruction, audience, languageName) {
   return [
     "You are an expert LinkedIn ghostwriter. You write original posts that earn engagement without sounding like generic AI content.",
     `Tone of voice: ${toneInstruction}`,
+    languageName ? `Write the entire post in ${languageName}.` : "",
     audience ? `Target audience: ${audience}.` : "",
     "Rules:",
     "- Write ONLY the post body — no preamble, no quotation marks, no markdown headings.",
@@ -59,7 +63,7 @@ function buildSystemPrompt(toneInstruction, audience) {
 }
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
-export async function generatePost({ topic, tone, audience } = {}) {
+export async function generatePost({ topic, tone, audience, language } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -69,7 +73,7 @@ export async function generatePost({ topic, tone, audience } = {}) {
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience);
+  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null);
 
   const res = await fetch(COMPLETIONS_URL, {
     method: "POST",
@@ -101,4 +105,124 @@ export async function generatePost({ topic, tone, audience } = {}) {
   }
   // Hard cap so generated content can never exceed LinkedIn's limit.
   return text.slice(0, MAX_POST_LENGTH);
+}
+
+// Generate several distinct LinkedIn post drafts grounded in source material
+// (e.g. extracted PDF text), all in the resolved tone. Returns string[].
+export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language } = {}) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+  const source = String(sourceText || "").trim();
+  if (source.length < 40) {
+    throw new Error("The content source has too little text to generate from.");
+  }
+  const n = Math.max(1, Math.min(7, parseInt(count, 10) || 3));
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+  const systemPrompt = [
+    "You are an expert LinkedIn ghostwriter. Using the SOURCE MATERIAL provided, write original LinkedIn posts.",
+    `Tone of voice: ${resolveTone(tone)}`,
+    language ? `Write every post in ${languageName(language)}.` : "",
+    audience ? `Target audience: ${audience}.` : "",
+    `Produce exactly ${n} DISTINCT posts, each covering a different angle, insight, or theme drawn from the source — do not repeat the same point.`,
+    "Each post must:",
+    "- Be ready to publish: no preamble, no quotation marks, no markdown headings.",
+    "- Open with a strong scroll-stopping hook in the first line.",
+    "- Use short paragraphs and line breaks for mobile readability.",
+    "- Sound human and specific; avoid clichés and buzzword soup.",
+    "- Optionally end with 3-5 relevant hashtags on their own line.",
+    `- Stay under ${MAX_POST_LENGTH} characters.`,
+    'Respond with ONLY a JSON object of the form {"posts": ["<post 1>", "<post 2>", ...]} containing exactly ' + n + " strings.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const res = await fetch(COMPLETIONS_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
+      ],
+      temperature: 0.85,
+      max_tokens: 600 * n,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`OpenAI request failed: ${res.status} ${errBody.slice(0, 500)}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content?.trim();
+  let posts = [];
+  try {
+    const parsed = JSON.parse(content);
+    posts = Array.isArray(parsed) ? parsed : parsed.posts || [];
+  } catch {
+    throw new Error("OpenAI returned an unparseable response.");
+  }
+  posts = posts
+    .filter((p) => typeof p === "string" && p.trim())
+    .map((p) => p.trim().slice(0, MAX_POST_LENGTH));
+  if (!posts.length) {
+    throw new Error("OpenAI returned no usable posts.");
+  }
+  return posts;
+}
+
+// Analyze example posts and distill a reusable tone-of-voice instruction that
+// the generator can later use verbatim. Returns a concise style brief.
+export async function learnToneFromExamples(samples) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+  const text = String(samples || "").trim();
+  if (text.length < 80) {
+    throw new Error("Paste at least one full example post (a bit more text) to learn a tone.");
+  }
+
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const systemPrompt = [
+    "You are a writing-style analyst. You are given one or more real LinkedIn posts written by the same person.",
+    "Produce a precise, reusable TONE-OF-VOICE BRIEF that another writer could follow to reproduce this exact voice on new topics.",
+    "Capture concretely: sentence length and rhythm, hook/opening style, vocabulary and register (formal/casual), use of first vs second person, emoji usage, hashtag habits, line-break/formatting patterns, punctuation quirks, and how posts typically close (CTA, question, etc.).",
+    "Write the brief as direct instructions to the writer (imperative voice). Do NOT summarize the topics or quote the posts. Do NOT include a preamble. 120-220 words.",
+  ].join("\n");
+
+  const res = await fetch(COMPLETIONS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Here are the example posts:\n\n${text.slice(0, 12000)}` },
+      ],
+      temperature: 0.4,
+      max_tokens: 600,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`OpenAI request failed: ${res.status} ${errBody.slice(0, 500)}`);
+  }
+
+  const data = await res.json();
+  const instruction = data.choices?.[0]?.message?.content?.trim();
+  if (!instruction) {
+    throw new Error("OpenAI returned an empty tone analysis.");
+  }
+  return instruction.slice(0, 4000);
 }

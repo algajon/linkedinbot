@@ -1,6 +1,7 @@
 <% if (aiEnabled) { %>
+  <% const saved = (typeof savedTones !== "undefined" && savedTones) ? savedTones : []; %>
   <div class="ai-panel">
-    <h3>✨ Generate with AI</h3>
+    <h3>Generate with AI</h3>
     <label>
       What should the post be about?
       <textarea id="ai-topic" rows="2" placeholder="e.g. three lessons from scaling our engineering team to 50 people"></textarea>
@@ -9,10 +10,19 @@
       <label>
         Tone of voice
         <select id="ai-tone">
-          <% Object.entries(tonePresets).forEach(([key, t]) => { %>
-            <option value="<%= key %>"><%= t.label %></option>
-          <% }) %>
-          <option value="__custom__">Custom…</option>
+          <% if (saved.length) { %>
+            <optgroup label="Your saved voices">
+              <% saved.forEach((p) => { %>
+                <option value="saved:<%= p.id %>" data-instruction="<%= p.instruction.replace(/"/g, '&quot;') %>"><%= p.name %></option>
+              <% }) %>
+            </optgroup>
+          <% } %>
+          <optgroup label="Built-in tones">
+            <% Object.entries(tonePresets).forEach(([key, t]) => { %>
+              <option value="<%= key %>"><%= t.label %></option>
+            <% }) %>
+            <option value="__custom__">Custom…</option>
+          </optgroup>
         </select>
       </label>
       <label>
@@ -28,5 +38,28 @@
       <button type="button" id="ai-generate" class="btn primary">Generate draft</button>
       <span id="ai-status" class="muted" role="status" aria-live="polite"></span>
     </div>
+
+    <details class="learn-tone">
+      <summary>Learn a tone from examples</summary>
+      <p class="muted">Paste a few real posts written in a voice you want to reuse. We'll distill it into a saved preset you can pick above.</p>
+      <label>
+        Example posts
+        <textarea id="learn-samples" rows="6" placeholder="Paste 2–5 posts here, in their original wording…"></textarea>
+      </label>
+      <div class="ai-actions">
+        <button type="button" id="learn-analyze" class="btn">Analyze tone</button>
+        <span id="learn-status" class="muted" role="status" aria-live="polite"></span>
+      </div>
+      <div id="learn-result" hidden>
+        <label>
+          Captured voice <span class="muted">(edit if you like)</span>
+          <textarea id="learn-instruction" rows="6"></textarea>
+        </label>
+        <div class="learn-save-row">
+          <input id="learn-name" type="text" placeholder="Name this voice — e.g. Olha Siuta (BizDev)" />
+          <button type="button" id="learn-save" class="btn primary">Save preset</button>
+        </div>
+      </div>
+    </details>
   </div>
 <% } %>

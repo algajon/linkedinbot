@@ -36,6 +36,14 @@
             <% }) %>
           </select>
         </label>
+        <label>
+          Post language
+          <select name="language" id="post-language">
+            <% postLanguages.forEach((l) => { %>
+              <option value="<%= l.code %>" <%= l.code === (values.language || "en") ? "selected" : "" %>><%= l.label %></option>
+            <% }) %>
+          </select>
+        </label>
       </div>
 
       <div class="cta-row">
