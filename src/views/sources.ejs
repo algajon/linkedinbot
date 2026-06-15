@@ -19,7 +19,7 @@
 <section class="card">
   <h3><%= t("sources.your") %></h3>
   <% if (!sources.length) { %>
-    <p class="muted" id="no-sources"><%= t("sources.none") %></p>
+    <p class="empty" id="no-sources"><%= t("sources.none") %></p>
   <% } %>
   <ul id="source-list" class="post-mini-list">
     <% sources.forEach((s) => { %>

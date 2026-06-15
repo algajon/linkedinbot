@@ -4,7 +4,7 @@
 <p class="muted"><%= t("queue.intro") %><% if (routine) { %> <%= t("queue.fromroutine") %> <strong><%= routine.name %></strong><% } else { %> <a href="/routines"><%= t("queue.setup") %></a> <%= t("queue.setupsuffix") %><% } %></p>
 
 <% if (!items.length) { %>
-  <p class="muted"><%= t("queue.empty") %> <a href="/sources"><%= t("sources.generate") %> →</a></p>
+  <p class="empty"><%= t("queue.empty") %> <a href="/sources"><%= t("sources.generate") %> →</a></p>
 <% } %>
 
 <% items.forEach(({ post, files, suggested }) => { %>

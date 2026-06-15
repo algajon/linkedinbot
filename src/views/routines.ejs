@@ -56,7 +56,7 @@
 <section class="card">
   <h3><%= t("routines.your") %></h3>
   <% if (!routines.length) { %>
-    <p class="muted"><%= t("routines.none") %></p>
+    <p class="empty"><%= t("routines.none") %></p>
   <% } else { %>
     <ul class="post-mini-list">
       <% routines.forEach((r) => { %>
