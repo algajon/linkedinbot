@@ -13,7 +13,7 @@
       <%= t("dash.connected") %><% if (linkedinAccount.linkedinDisplayName) { %> — <strong><%= linkedinAccount.linkedinDisplayName %></strong><% } %>.
     </p>
     <% if (!linkedinAccount.linkedinPersonUrn) { %>
-      <p class="alert error">No member URN was captured — reconnect to enable posting.</p>
+      <p class="alert error"><%= t("dash.nourn") %></p>
     <% } %>
     <form action="/auth/linkedin/disconnect" method="post" class="inline">
       <button type="submit" class="btn danger"><%= t("linkedin.disconnect") %></button>

@@ -41,23 +41,23 @@
 
     <details class="learn-tone">
       <summary><%= t("ai.learn") %></summary>
-      <p class="muted">Paste a few real posts written in a voice you want to reuse. We'll distill it into a saved preset you can pick above.</p>
+      <p class="muted"><%= t("ai.learnhelp") %></p>
       <label>
-        Example posts
-        <textarea id="learn-samples" rows="6" placeholder="Paste 2–5 posts here, in their original wording…"></textarea>
+        <%= t("ai.examples") %>
+        <textarea id="learn-samples" rows="6" placeholder="<%= t("ai.examplesph") %>"></textarea>
       </label>
       <div class="ai-actions">
-        <button type="button" id="learn-analyze" class="btn">Analyze tone</button>
+        <button type="button" id="learn-analyze" class="btn"><%= t("ai.analyze") %></button>
         <span id="learn-status" class="muted" role="status" aria-live="polite"></span>
       </div>
       <div id="learn-result" hidden>
         <label>
-          Captured voice <span class="muted">(edit if you like)</span>
+          <%= t("ai.captured") %> <span class="muted">(<%= t("ai.capturededit") %>)</span>
           <textarea id="learn-instruction" rows="6"></textarea>
         </label>
         <div class="learn-save-row">
-          <input id="learn-name" type="text" placeholder="Name this voice — e.g. Olha Siuta (BizDev)" />
-          <button type="button" id="learn-save" class="btn primary">Save preset</button>
+          <input id="learn-name" type="text" placeholder="<%= t("ai.namevoice") %>" />
+          <button type="button" id="learn-save" class="btn primary"><%= t("ai.savepreset") %></button>
         </div>
       </div>
     </details>

@@ -47,12 +47,12 @@
               </form>
             <% } %>
             <% if (["SCHEDULED", "DRAFT"].includes(p.status)) { %>
-              <form action="/posts/<%= p.id %>/cancel" method="post" class="inline" onsubmit="return confirm('Cancel this post?');">
+              <form action="/posts/<%= p.id %>/cancel" method="post" class="inline" onsubmit="return confirm('<%= t("confirm.cancel") %>');">
                 <button type="submit" class="btn small danger"><%= t("post.cancel") %></button>
               </form>
             <% } %>
             <% if (p.status !== "PUBLISHING") { %>
-              <form action="/posts/<%= p.id %>/delete" method="post" class="inline" onsubmit="return confirm('Delete this post permanently?');">
+              <form action="/posts/<%= p.id %>/delete" method="post" class="inline" onsubmit="return confirm('<%= t("confirm.delete") %>');">
                 <button type="submit" class="btn small ghost"><%= t("post.delete") %></button>
               </form>
             <% } %>

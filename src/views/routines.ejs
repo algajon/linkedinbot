@@ -1,7 +1,7 @@
 <%- include("partials/header") %>
 
 <h1><%= t("routines.title") %></h1>
-<p class="muted">A routine defines a posting cadence. Its times are prefilled when you approve drafts in the <a href="/queue"><%= t("queue.title") %></a>, helping you keep a steady, LinkedIn-friendly schedule.</p>
+<p class="muted"><%= t("routines.intro") %> <a href="/queue"><%= t("queue.title") %></a><%= t("routines.introsuffix") %></p>
 
 <% if (typeof errors !== "undefined" && errors && errors.length) { %>
   <ul class="alert error"><% errors.forEach((e) => { %><li><%= e %></li><% }) %></ul>
@@ -33,7 +33,7 @@
     </div>
 
     <div id="weekly-block" hidden>
-      <p class="muted">Add one or more weekly slots. Empty rows are ignored.</p>
+      <p class="muted"><%= t("routines.weeklyhint") %></p>
       <% for (let i = 0; i < 5; i++) { %>
         <div class="schedule-row weekly-row">
           <label>
@@ -63,8 +63,8 @@
         <li>
           <strong><%= r.name %></strong>
           <span class="badge badge-scheduled"><%= r.cadence %></span>
-          <span class="muted"><%= r.timezone %><% if (r.cadence !== "WEEKLY") { %> · from <%= r.anchorTime %><% } else if (r.slots) { %> · <%= (Array.isArray(r.slots) ? r.slots.length : 0) %> slots/week<% } %></span>
-          <form action="/routines/<%= r.id %>/delete" method="post" class="inline" onsubmit="return confirm('Delete this routine?');">
+          <span class="muted"><%= r.timezone %><% if (r.cadence !== "WEEKLY") { %> · <%= t("routines.from") %> <%= r.anchorTime %><% } else if (r.slots) { %> · <%= (Array.isArray(r.slots) ? r.slots.length : 0) %> <%= t("routines.slotsweek") %><% } %></span>
+          <form action="/routines/<%= r.id %>/delete" method="post" class="inline" onsubmit="return confirm('<%= t("confirm.delroutine") %>');">
             <button type="submit" class="btn small ghost"><%= t("common.delete") %></button>
           </form>
         </li>

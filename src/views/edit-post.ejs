@@ -65,7 +65,7 @@
 <% const postFiles = (typeof files !== "undefined" && files) ? files : []; %>
 <section class="card images-card" id="images-card" data-post-id="<%= post.id %>">
   <h3><%= t("upload.image") %> <span class="muted">(JPEG, PNG, WebP — max 15 MB)</span></h3>
-  <p class="muted">Attached images are published with this post to LinkedIn.</p>
+  <p class="muted"><%= t("upload.help") %></p>
 
   <ul id="image-list" class="image-grid">
     <% postFiles.forEach((f) => { %>

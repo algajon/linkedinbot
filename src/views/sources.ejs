@@ -1,7 +1,7 @@
 <%- include("partials/header") %>
 
 <h1><%= t("sources.title") %></h1>
-<p class="muted">Upload a PDF (a brief, one-pager, article…). We extract its text and use it as source material to draft posts — which land in your <a href="/queue"><%= t("queue.title") %></a>.</p>
+<p class="muted"><%= t("sources.intro") %> <a href="/queue"><%= t("queue.title") %></a>.</p>
 
 <% if (!linkedinReady) { %>
   <p class="alert error"><%= t("linkedin.needconnect") %> <a href="/auth/linkedin"><%= t("linkedin.connect") %></a>.</p>
@@ -25,7 +25,7 @@
     <% sources.forEach((s) => { %>
       <li class="source-item" data-source-id="<%= s.id %>">
         <strong><%= s.name %></strong>
-        <span class="muted">· <%= s.charCount %> chars</span>
+        <span class="muted">· <%= s.charCount %> <%= t("sources.chars") %></span>
         <span class="row-actions">
           <button type="button" class="btn small generate-from" data-source-id="<%= s.id %>"><%= t("sources.generate") %></button>
           <button type="button" class="btn small ghost delete-source" data-source-id="<%= s.id %>"><%= t("common.delete") %></button>
