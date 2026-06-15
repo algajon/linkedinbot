@@ -75,7 +75,15 @@ async function chatCompletion(provider, { messages, temperature = 0.8, maxTokens
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error(`${provider.name} returned an empty response.`);
-  return content;
+  return { content, finishReason: data.choices?.[0]?.finish_reason };
+}
+
+// When the token cap clips a post mid-sentence, trim back to the last complete
+// sentence so it ends cleanly (only applied when the model was actually cut off).
+function tidyClippedTail(text) {
+  const t = String(text).trim();
+  const m = t.match(/^[\s\S]*[.!?…)"'”\]](?=\s|$)/);
+  return m && m[0].length > t.length * 0.5 ? m[0].trim() : t;
 }
 
 
@@ -130,7 +138,7 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars)
     "- Sound human and specific; avoid clichés, buzzword soup, and em-dash overuse.",
     "- Optionally end with 3-5 relevant hashtags on their own line.",
     targetChars
-      ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible. Shorter is better than longer; cut every non-essential word.`
+      ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible, and finish your final sentence within the budget. Shorter is better than longer; cut every non-essential word.`
       : "",
     `- Never exceed ${MAX_POST_LENGTH} characters.`,
   ]
@@ -165,7 +173,7 @@ export async function generatePost({ topic, tone, audience, language, length } =
       ],
       temperature: 0.8,
       // Cap tokens to the target length so "short" really is short (~4 chars/token).
-      max_tokens: Math.ceil(lengthTarget(length) / 4) + 60,
+      max_tokens: Math.ceil(lengthTarget(length) / 4) + 10,
     }),
   });
 
@@ -176,9 +184,13 @@ export async function generatePost({ topic, tone, audience, language, length } =
   }
 
   const data = await res.json();
-  const text = data.choices?.[0]?.message?.content?.trim();
+  let text = data.choices?.[0]?.message?.content?.trim();
   if (!text) {
     throw new Error("OpenAI returned an empty response.");
+  }
+  // If the token cap clipped it mid-sentence, trim back to a clean ending.
+  if (data.choices?.[0]?.finish_reason === "length") {
+    text = tidyClippedTail(text);
   }
   // Hard cap so generated content can never exceed LinkedIn's limit.
   return text.slice(0, MAX_POST_LENGTH);
@@ -209,7 +221,7 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Use short paragraphs and line breaks for mobile readability.",
     "- Sound human and specific; avoid clichés and buzzword soup.",
     "- Optionally end with 3-5 relevant hashtags on their own line.",
-    `- Target roughly ${lengthTarget(length)} characters each — be concise, say the same thing with fewer words.`,
+    `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
     `- Never exceed ${MAX_POST_LENGTH} characters.`,
     `Output the ${n} posts as plain text, separated by a line containing only:`,
     "===POST===",
@@ -220,14 +232,14 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
 
   // eslint-disable-next-line no-console
   console.log(`[ai] source generation via ${provider.name} (${provider.model})`);
-  const content = await chatCompletion(provider, {
+  const { content, finishReason } = await chatCompletion(provider, {
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
     ],
     temperature: 0.85,
     // Per-post token budget scaled to the target length, times the post count.
-    maxTokens: (Math.ceil(lengthTarget(length) / 4) + 80) * n,
+    maxTokens: (Math.ceil(lengthTarget(length) / 4) + 14) * n,
   });
 
   // Posts are separated by a delimiter line. This is robust to multi-line post
@@ -238,11 +250,16 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     .replace(/^```[a-z]*\s*/i, "")
     .replace(/\s*```$/i, "")
     .split(/\r?\n?\s*={2,}\s*POST\s*={2,}\s*\r?\n?/i)
-    .map((p) => p.trim())
+    // Strip any trailing partial delimiter the token cap may have clipped (e.g. "===").
+    .map((p) => p.replace(/\s*={2,}[\s\S]*$/, "").trim())
     .filter(Boolean)
     .map((p) => p.slice(0, MAX_POST_LENGTH));
   if (!posts.length) {
     throw new Error(`${provider.name} returned no usable posts.`);
+  }
+  // If the cap clipped output, only the last post can be cut off — tidy its tail.
+  if (finishReason === "length" && posts.length) {
+    posts[posts.length - 1] = tidyClippedTail(posts[posts.length - 1]);
   }
   return posts.slice(0, n);
 }

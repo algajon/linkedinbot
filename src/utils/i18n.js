@@ -156,6 +156,8 @@ export const translations = {
     "length.short": "Short",
     "length.medium": "Medium",
     "length.long": "Long",
+    "length.custom": "Custom…",
+    "length.customph": "chars, e.g. 450",
   },
   de: {
     "app.title": "LinkedIn geplanter Poster",
@@ -306,6 +308,8 @@ export const translations = {
     "length.short": "Kurz",
     "length.medium": "Mittel",
     "length.long": "Lang",
+    "length.custom": "Benutzerdefiniert…",
+    "length.customph": "Zeichen, z.B. 450",
   },
 };
 

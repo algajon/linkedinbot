@@ -35,7 +35,9 @@
           <% postLengths.forEach((l) => { %>
             <option value="<%= l.key %>" <%= l.key === "medium" ? "selected" : "" %>><%= t("length." + l.key) %> (~<%= l.chars %>)</option>
           <% }) %>
+          <option value="__custom__"><%= t("length.custom") %></option>
         </select>
+        <input id="ai-length-custom" type="number" min="120" max="<%= maxLength %>" placeholder="<%= t("length.customph") %>" hidden />
       </label>
     </div>
     <label id="ai-custom-wrap" hidden>

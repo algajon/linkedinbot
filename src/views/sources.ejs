@@ -68,7 +68,9 @@
           <% postLengths.forEach((l) => { %>
             <option value="<%= l.key %>" <%= l.key === "medium" ? "selected" : "" %>><%= t("length." + l.key) %> (~<%= l.chars %>)</option>
           <% }) %>
+          <option value="__custom__"><%= t("length.custom") %></option>
         </select>
+        <input id="gen-length-custom" type="number" min="120" max="1300" placeholder="<%= t("length.customph") %>" hidden />
       </label>
       <label>
         <%= t("sources.count") %>

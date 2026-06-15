@@ -1,3 +1,27 @@
+// Resolve a length selector's value: a preset key, or the custom char count
+// when "Custom…" is chosen.
+function pickLength(selectId, customId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return "medium";
+  if (sel.value === "__custom__") {
+    const custom = document.getElementById(customId);
+    return custom && custom.value ? custom.value : "medium";
+  }
+  return sel.value;
+}
+
+// Show/hide a custom numeric input when its select is set to "Custom…".
+function wireLengthToggle(selectId, customId) {
+  const sel = document.getElementById(selectId);
+  const custom = document.getElementById(customId);
+  if (!sel || !custom) return;
+  const sync = () => {
+    custom.hidden = sel.value !== "__custom__";
+  };
+  sel.addEventListener("change", sync);
+  sync();
+}
+
 // Live character count + post preview for the editor screens.
 (function () {
   const form = document.querySelector(".post-form");
@@ -34,6 +58,7 @@
   toneEl.addEventListener("change", function () {
     customWrap.hidden = toneEl.value !== "__custom__";
   });
+  wireLengthToggle("ai-length", "ai-length-custom");
 
   generateBtn.addEventListener("click", async function () {
     const topic = (topicEl.value || "").trim();
@@ -67,7 +92,7 @@
           tone,
           audience: (audienceEl.value || "").trim(),
           language: langEl ? langEl.value : "en",
-          length: (document.getElementById("ai-length") || {}).value || "medium",
+          length: pickLength("ai-length", "ai-length-custom"),
         }),
       });
       const data = await res.json();
@@ -237,6 +262,7 @@
   const uploadBtn = document.getElementById("source-upload-btn");
   const genPanel = document.getElementById("generate-panel");
   if (!uploadBtn && !genPanel) return;
+  wireLengthToggle("gen-length", "gen-length-custom");
 
   const input = document.getElementById("source-input");
   const sourceStatus = document.getElementById("source-status");
@@ -334,7 +360,7 @@
             count: genCount.value,
             audience: (genAudience.value || "").trim(),
             language: (document.getElementById("gen-language") || {}).value || "en",
-            length: (document.getElementById("gen-length") || {}).value || "medium",
+            length: pickLength("gen-length", "gen-length-custom"),
           }),
         });
         const data = await res.json();
