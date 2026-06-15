@@ -9,6 +9,7 @@ export async function generate(req, res, next) {
     const { topic, audience, language, length } = req.body || {};
     let tone = req.body?.tone;
     let exemplars = [];
+    let modelOverride;
 
     if (req.body?.tonePresetId) {
       const preset = await prisma.tonePreset.findFirst({
@@ -17,10 +18,11 @@ export async function generate(req, res, next) {
       if (preset) {
         tone = preset.instruction;
         exemplars = parseExemplars(preset.sampleText);
+        modelOverride = preset.openaiModel || undefined; // fine-tuned model, if any
       }
     }
 
-    const text = await generatePost({ topic, tone, audience, language, length, exemplars });
+    const text = await generatePost({ topic, tone, audience, language, length, exemplars, modelOverride });
     res.json({ text });
   } catch (err) {
     const status = /not configured|required/i.test(err.message) ? 400 : 502;

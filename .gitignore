@@ -7,3 +7,7 @@ dist/
 
 # Locally-stored uploaded files (dev only)
 uploads/
+
+# Generated fine-tune datasets / adapters
+fine-tune/
+adapters/

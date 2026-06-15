@@ -108,6 +108,34 @@ The cluster is LAN/VPN-only, so this works when the app runs **on-prem or in the
 office network** — not from a public cloud host (which transparently falls back
 to OpenAI). Topic-based generation and tone-learning still use OpenAI.
 
+## Per-author tone (few-shot + optional fine-tuning)
+
+Saved **tone presets** capture a person's voice. By default generation is
+**few-shot**: the preset's distilled brief plus several of the author's real
+posts (stored in `sampleText`, `===POST===` delimited) are injected into the
+prompt. Strong anti-"AI tell" rules + a post-processor (`deAiify`) strip em
+dashes, markdown, bullet/numbered lists, emoji spam, and generic filler hashtags.
+
+For maximum fidelity you can **fine-tune per author** (optional, scripts only —
+nothing runs or spends automatically):
+
+**Topic posts → OpenAI fine-tune** (`scripts/fineTune.js`):
+```bash
+node scripts/fineTune.js export "Olha Siuta" fine-tune/olha.jsonl   # build chat JSONL
+node scripts/fineTune.js launch fine-tune/olha.jsonl "Olha Siuta"   # uploads + starts job ($)
+node scripts/fineTune.js status <jobId> "Olha Siuta"                # writes openaiModel onto the preset
+```
+Once `TonePreset.openaiModel` is set, topic generation uses that fine-tuned model.
+
+**Source posts → DGX LoRA** (`scripts/train_dgx_lora.py`, runs on the DGX GPU):
+```bash
+python scripts/train_dgx_lora.py --data fine-tune/olha.jsonl \
+  --base-model Qwen/Qwen2.5-72B-Instruct --out adapters/olha
+vllm serve Qwen/Qwen2.5-72B-Instruct --enable-lora --lora-modules olha=adapters/olha
+# then: UPDATE "TonePreset" SET "dgxLora"='olha' WHERE name LIKE 'Olha%';
+```
+Once `TonePreset.dgxLora` is set, source generation routes to that LoRA adapter.
+
 ## Deployment
 
 Free-tier setup: a Render **free** web service + external Postgres (Neon/Supabase

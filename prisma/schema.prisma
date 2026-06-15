@@ -29,6 +29,8 @@ model TonePreset {
   name        String
   instruction String
   sampleText  String?
+  openaiModel String?  // fine-tuned OpenAI model id (topic generation)
+  dgxLora     String?  // vLLM LoRA adapter name (source generation)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

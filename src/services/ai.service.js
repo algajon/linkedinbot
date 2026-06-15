@@ -273,7 +273,7 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars,
 }
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
-export async function generatePost({ topic, tone, audience, language, length, exemplars } = {}) {
+export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -282,7 +282,8 @@ export async function generatePost({ topic, tone, audience, language, length, ex
     throw new Error("A topic or prompt is required to generate a post.");
   }
 
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  // A per-author fine-tuned model id (modelOverride) takes precedence.
+  const model = modelOverride || process.env.OPENAI_MODEL || "gpt-4o-mini";
   const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length), exemplars);
 
   const res = await fetch(COMPLETIONS_URL, {
@@ -327,10 +328,14 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
-export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars } = {}) {
-  const provider = sourceProvider();
+export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars, loraModel } = {}) {
+  let provider = sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
+  }
+  // Route to a per-author LoRA adapter served by vLLM, if one is set.
+  if (loraModel && provider.name?.startsWith("DGX")) {
+    provider = { ...provider, model: loraModel };
   }
   const source = String(sourceText || "").trim();
   if (source.length < 40) {

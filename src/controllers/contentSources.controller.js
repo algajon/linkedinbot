@@ -65,6 +65,7 @@ export async function generateFromSource(req, res) {
     // Resolve a saved voice preset (instruction + few-shot exemplars) if chosen.
     let tone = req.body?.tone;
     let exemplars = [];
+    let loraModel;
     if (req.body?.tonePresetId) {
       const preset = await prisma.tonePreset.findFirst({
         where: { id: req.body.tonePresetId, userId: req.user.id },
@@ -72,6 +73,7 @@ export async function generateFromSource(req, res) {
       if (preset) {
         tone = preset.instruction;
         exemplars = parseExemplars(preset.sampleText);
+        loraModel = preset.dgxLora || undefined; // per-author LoRA adapter, if any
       }
     }
 
@@ -83,6 +85,7 @@ export async function generateFromSource(req, res) {
       language,
       length: req.body?.length,
       exemplars,
+      loraModel,
     });
 
     // Default timezone from the user's active routine, else UTC.
