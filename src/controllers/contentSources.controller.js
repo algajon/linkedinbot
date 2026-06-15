@@ -68,6 +68,7 @@ export async function generateFromSource(req, res) {
       audience,
       count,
       language,
+      length: req.body?.length,
     });
 
     // Default timezone from the user's active routine, else UTC.

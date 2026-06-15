@@ -16,6 +16,7 @@ import internalRoutes from "./routes/internal.routes.js";
 import { TONE_PRESETS } from "./services/ai.service.js";
 import { LANGUAGES, t } from "./utils/i18n.js";
 import { POST_LANGUAGES } from "./utils/postLanguages.js";
+import { POST_LENGTHS } from "./utils/postLengths.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +77,7 @@ export function createApp() {
     res.locals.aiEnabled = Boolean(process.env.OPENAI_API_KEY);
     res.locals.tonePresets = TONE_PRESETS;
     res.locals.postLanguages = POST_LANGUAGES;
+    res.locals.postLengths = POST_LENGTHS;
     next();
   });
 

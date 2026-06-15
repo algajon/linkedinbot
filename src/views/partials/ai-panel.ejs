@@ -29,6 +29,14 @@
         <%= t("ai.audience") %> <span class="muted">(<%= t("ai.audience.optional") %>)</span>
         <input id="ai-audience" type="text" placeholder="<%= t("ai.audience.placeholder") %>" />
       </label>
+      <label>
+        <%= t("post.length") %>
+        <select id="ai-length">
+          <% postLengths.forEach((l) => { %>
+            <option value="<%= l.key %>" <%= l.key === "medium" ? "selected" : "" %>><%= t("length." + l.key) %> (~<%= l.chars %>)</option>
+          <% }) %>
+        </select>
+      </label>
     </div>
     <label id="ai-custom-wrap" hidden>
       <%= t("ai.custom") %>

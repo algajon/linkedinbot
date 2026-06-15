@@ -67,6 +67,7 @@
           tone,
           audience: (audienceEl.value || "").trim(),
           language: langEl ? langEl.value : "en",
+          length: (document.getElementById("ai-length") || {}).value || "medium",
         }),
       });
       const data = await res.json();
@@ -333,6 +334,7 @@
             count: genCount.value,
             audience: (genAudience.value || "").trim(),
             language: (document.getElementById("gen-language") || {}).value || "en",
+            length: (document.getElementById("gen-length") || {}).value || "medium",
           }),
         });
         const data = await res.json();

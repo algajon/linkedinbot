@@ -152,6 +152,10 @@ export const translations = {
     "confirm.delete": "Delete this post permanently?",
     "confirm.reject": "Reject this draft?",
     "confirm.delroutine": "Delete this routine?",
+    "post.length": "Length",
+    "length.short": "Short",
+    "length.medium": "Medium",
+    "length.long": "Long",
   },
   de: {
     "app.title": "LinkedIn geplanter Poster",
@@ -298,6 +302,10 @@ export const translations = {
     "confirm.delete": "Diesen Beitrag endgültig löschen?",
     "confirm.reject": "Diesen Entwurf ablehnen?",
     "confirm.delroutine": "Diese Routine löschen?",
+    "post.length": "Länge",
+    "length.short": "Kurz",
+    "length.medium": "Mittel",
+    "length.long": "Lang",
   },
 };
 

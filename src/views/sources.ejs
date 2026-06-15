@@ -63,6 +63,14 @@
         </select>
       </label>
       <label>
+        <%= t("post.length") %>
+        <select id="gen-length">
+          <% postLengths.forEach((l) => { %>
+            <option value="<%= l.key %>" <%= l.key === "medium" ? "selected" : "" %>><%= t("length." + l.key) %> (~<%= l.chars %>)</option>
+          <% }) %>
+        </select>
+      </label>
+      <label>
         <%= t("sources.count") %>
         <input type="number" id="gen-count" min="1" max="7" value="3" />
       </label>

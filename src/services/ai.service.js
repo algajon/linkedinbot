@@ -3,6 +3,7 @@
 
 import { MAX_POST_LENGTH } from "../utils/validation.js";
 import { languageName } from "../utils/postLanguages.js";
+import { lengthTarget } from "../utils/postLengths.js";
 
 const COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -116,7 +117,7 @@ export function resolveTone(tone) {
   return preset ? preset.instruction : String(tone).slice(0, 4000);
 }
 
-function buildSystemPrompt(toneInstruction, audience, languageName) {
+function buildSystemPrompt(toneInstruction, audience, languageName, targetChars) {
   return [
     "You are an expert LinkedIn ghostwriter. You write original posts that earn engagement without sounding like generic AI content.",
     `Tone of voice: ${toneInstruction}`,
@@ -128,14 +129,17 @@ function buildSystemPrompt(toneInstruction, audience, languageName) {
     "- Use short paragraphs and line breaks for readability on mobile.",
     "- Sound human and specific; avoid clichés, buzzword soup, and em-dash overuse.",
     "- Optionally end with 3-5 relevant hashtags on their own line.",
-    `- Keep the entire post under ${MAX_POST_LENGTH} characters.`,
+    targetChars
+      ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible. Shorter is better than longer; cut every non-essential word.`
+      : "",
+    `- Never exceed ${MAX_POST_LENGTH} characters.`,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
-export async function generatePost({ topic, tone, audience, language } = {}) {
+export async function generatePost({ topic, tone, audience, language, length } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -145,7 +149,7 @@ export async function generatePost({ topic, tone, audience, language } = {}) {
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null);
+  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length));
 
   const res = await fetch(COMPLETIONS_URL, {
     method: "POST",
@@ -160,7 +164,8 @@ export async function generatePost({ topic, tone, audience, language } = {}) {
         { role: "user", content: `Write a LinkedIn post about: ${String(topic).trim()}` },
       ],
       temperature: 0.8,
-      max_tokens: 800,
+      // Cap tokens to the target length so "short" really is short (~4 chars/token).
+      max_tokens: Math.ceil(lengthTarget(length) / 4) + 60,
     }),
   });
 
@@ -181,7 +186,7 @@ export async function generatePost({ topic, tone, audience, language } = {}) {
 
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
-export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language } = {}) {
+export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length } = {}) {
   const provider = sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
@@ -204,7 +209,8 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Use short paragraphs and line breaks for mobile readability.",
     "- Sound human and specific; avoid clichés and buzzword soup.",
     "- Optionally end with 3-5 relevant hashtags on their own line.",
-    `- Stay under ${MAX_POST_LENGTH} characters.`,
+    `- Target roughly ${lengthTarget(length)} characters each — be concise, say the same thing with fewer words.`,
+    `- Never exceed ${MAX_POST_LENGTH} characters.`,
     `Output the ${n} posts as plain text, separated by a line containing only:`,
     "===POST===",
     "Do not number them and write nothing before the first post or after the last.",
@@ -220,7 +226,8 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
       { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
     ],
     temperature: 0.85,
-    maxTokens: 600 * n,
+    // Per-post token budget scaled to the target length, times the post count.
+    maxTokens: (Math.ceil(lengthTarget(length) / 4) + 80) * n,
   });
 
   // Posts are separated by a delimiter line. This is robust to multi-line post
