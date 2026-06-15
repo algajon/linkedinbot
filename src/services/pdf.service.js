@@ -1,7 +1,8 @@
 import { PDFParse } from "pdf-parse";
 
-// Cap stored/forwarded text so downstream generation prompts stay bounded.
-const MAX_TEXT_CHARS = 20000;
+// Cap extracted text kept per source. Stored compressed, so this is generous;
+// generation still only forwards a slice of it (see ai.service).
+const MAX_TEXT_CHARS = 100000;
 
 // Extract readable text from a PDF buffer. Returns { text, charCount }.
 export async function extractText(buffer) {

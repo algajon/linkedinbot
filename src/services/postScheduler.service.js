@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { getValidAccessToken } from "./token.service.js";
 import { publishLinkedInTextPost, uploadImageToLinkedIn } from "./linkedin.service.js";
 import { getPostImageFilesWithData } from "./upload.service.js";
+import { pruneOldSources } from "./contentSource.service.js";
 
 const BATCH_SIZE = 25;
 // A post stuck in PUBLISHING longer than this is considered abandoned (worker
@@ -106,6 +107,8 @@ async function publishLockedPost(post) {
 // Finds due posts, locks each atomically, and publishes them.
 export async function runPublishDuePosts() {
   const reclaimed = await reclaimStalePublishing();
+  // Housekeeping: drop content sources past the retention window.
+  await pruneOldSources().catch(() => {});
 
   const posts = await prisma.scheduledPost.findMany({
     where: { status: "SCHEDULED", scheduledAt: { lte: new Date() } },

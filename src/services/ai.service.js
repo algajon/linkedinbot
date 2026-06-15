@@ -285,7 +285,7 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   const { content, finishReason } = await chatCompletion(provider, {
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
+      { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 40000)}` },
     ],
     temperature: 0.85,
     // Per-post token budget scaled to the target length, times the post count.

@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { createFromPdf, listSources, getSource, deleteSource } from "../services/contentSource.service.js";
+import { createFromPdf, listSources, getSource, deleteSource, decompressText } from "../services/contentSource.service.js";
 import { generatePostsFromSource } from "../services/ai.service.js";
 import { getActiveRoutine } from "../services/routine.service.js";
 import { normalizePostLanguage } from "../utils/postLanguages.js";
@@ -63,7 +63,7 @@ export async function generateFromSource(req, res) {
     const language = normalizePostLanguage(req.body?.language);
 
     const bodies = await generatePostsFromSource({
-      sourceText: source.extractedText,
+      sourceText: decompressText(source.extractedText),
       tone,
       audience,
       count,

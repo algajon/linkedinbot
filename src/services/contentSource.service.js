@@ -1,7 +1,31 @@
+import { gzipSync, gunzipSync } from "node:zlib";
 import { prisma } from "../lib/prisma.js";
 import { extractText } from "./pdf.service.js";
 
 const MAX_PDF_SIZE = 15 * 1024 * 1024; // 15 MB
+const GZ_PREFIX = "gz1:"; // marks a gzip+base64 encoded value
+
+// Compress extracted text for storage; large source text shrinks ~3-5x.
+export function compressText(text) {
+  return GZ_PREFIX + gzipSync(Buffer.from(String(text), "utf8")).toString("base64");
+}
+
+// Decompress stored text. Plain (legacy, unprefixed) values pass through.
+export function decompressText(stored) {
+  if (typeof stored !== "string") return "";
+  if (!stored.startsWith(GZ_PREFIX)) return stored;
+  return gunzipSync(Buffer.from(stored.slice(GZ_PREFIX.length), "base64")).toString("utf8");
+}
+
+// Delete sources older than the retention window (SOURCE_RETENTION_DAYS, default
+// 30). Set to 0 to disable. Runs periodically from the publish job.
+export async function pruneOldSources() {
+  const days = parseInt(process.env.SOURCE_RETENTION_DAYS || "30", 10);
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const result = await prisma.contentSource.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  return result.count;
+}
 
 // Parse an uploaded PDF and persist its extracted text as a ContentSource.
 // We keep only the text — the binary PDF is not stored.
@@ -21,7 +45,7 @@ export async function createFromPdf(userId, file, name) {
       userId,
       name: (name || file.originalname || "Untitled document").slice(0, 120),
       filename: file.originalname || null,
-      extractedText: text,
+      extractedText: compressText(text),
       charCount,
     },
   });
