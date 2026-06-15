@@ -96,7 +96,12 @@ the browser.
 
 ## Deployment
 
-`render.yaml` provisions a web service and a Postgres database. The web service
-publishes due posts itself on an hourly timer (`PUBLISH_SCHEDULER=on`), so no
-separate cron service is required. Set the `sync: false` secrets in the Render
-dashboard. The web build runs `prisma migrate deploy`.
+Free-tier setup: a Render **free** web service + external Postgres (Neon/Supabase
+free tier via `DATABASE_URL`) + a free external cron (e.g. cron-job.org) that
+POSTs hourly to `/internal/publish-due-posts` with the `x-internal-cron-secret`
+header. Because free web services sleep when idle, `PUBLISH_SCHEDULER=off` and
+the external cron both wakes the service and publishes due posts. Set the
+`sync: false` secrets in the Render dashboard; the build runs `prisma migrate deploy`.
+
+For an always-on paid setup instead, set `plan: starter` and `PUBLISH_SCHEDULER=on`
+to run the publisher in-process hourly (no external cron needed).
