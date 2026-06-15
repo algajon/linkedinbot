@@ -86,6 +86,53 @@ function tidyClippedTail(text) {
   return m && m[0].length > t.length * 0.5 ? m[0].trim() : t;
 }
 
+// Separate request that picks fitting hashtags for a post body. Prefers OpenAI
+// (the body is public-bound content); falls back to the body's provider. The
+// returned tags are appended AFTER generation, so they don't count toward the
+// post's length budget. Returns a space-separated string (or "" on failure).
+export async function generateHashtags({ text, provider, language, count = 4 } = {}) {
+  const tagProvider = openaiProvider() || provider;
+  if (!tagProvider || !String(text || "").trim()) return "";
+  const sys = [
+    "You are a LinkedIn hashtag specialist.",
+    `Pick exactly ${count} highly relevant, specific hashtags for the post below.`,
+    "Respond with ONLY the hashtags on a single line, space-separated, each in #CamelCase, no duplicates, no other text.",
+    language ? `Prefer hashtags suited to ${languageName(language)} where natural; keep standard English tags when widely used.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  try {
+    const { content } = await chatCompletion(tagProvider, {
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: String(text).slice(0, 4000) },
+      ],
+      temperature: 0.4,
+      maxTokens: 60,
+    });
+    const found = content.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/#[\p{L}\d_]+/gu) || [];
+    const seen = new Set();
+    const uniq = [];
+    for (const tag of found) {
+      const k = tag.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        uniq.push(tag);
+      }
+    }
+    return uniq.slice(0, count).join(" ");
+  } catch {
+    return "";
+  }
+}
+
+// Append a hashtag line to a post body, keeping the whole thing within the cap.
+function appendHashtags(body, tags) {
+  if (!tags) return body;
+  const combined = `${body.trim()}\n\n${tags}`;
+  return combined.length <= MAX_POST_LENGTH ? combined : body.trim();
+}
+
 
 // Preset tones map a short key to a richer instruction the model can act on.
 // A free-text tone (anything not in this map) is passed through verbatim.
@@ -136,7 +183,7 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars)
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for readability on mobile.",
     "- Sound human and specific; avoid clichés, buzzword soup, and em-dash overuse.",
-    "- Optionally end with 3-5 relevant hashtags on their own line.",
+    "- Do NOT add hashtags — they are generated separately and must not count toward the length budget.",
     targetChars
       ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible, and finish your final sentence within the budget. Shorter is better than longer; cut every non-essential word.`
       : "",
@@ -192,8 +239,11 @@ export async function generatePost({ topic, tone, audience, language, length } =
   if (data.choices?.[0]?.finish_reason === "length") {
     text = tidyClippedTail(text);
   }
-  // Hard cap so generated content can never exceed LinkedIn's limit.
-  return text.slice(0, MAX_POST_LENGTH);
+  // Hard cap on the body so it can never exceed LinkedIn's limit.
+  text = text.slice(0, MAX_POST_LENGTH);
+  // Hashtags via a separate request — always added, not counted in the length.
+  const tags = await generateHashtags({ text, provider: openaiProvider(), language });
+  return appendHashtags(text, tags);
 }
 
 // Generate several distinct LinkedIn post drafts grounded in source material
@@ -220,7 +270,7 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for mobile readability.",
     "- Sound human and specific; avoid clichés and buzzword soup.",
-    "- Optionally end with 3-5 relevant hashtags on their own line.",
+    "- Do NOT add hashtags — they are generated separately and must not count toward the length budget.",
     `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
     `- Never exceed ${MAX_POST_LENGTH} characters.`,
     `Output the ${n} posts as plain text, separated by a line containing only:`,
@@ -261,7 +311,13 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   if (finishReason === "length" && posts.length) {
     posts[posts.length - 1] = tidyClippedTail(posts[posts.length - 1]);
   }
-  return posts.slice(0, n);
+  // Add fitting hashtags to each post via a separate request (not length-counted).
+  const withTags = [];
+  for (const body of posts.slice(0, n)) {
+    const tags = await generateHashtags({ text: body, provider, language });
+    withTags.push(appendHashtags(body, tags));
+  }
+  return withTags;
 }
 
 // Analyze example posts and distill a reusable tone-of-voice instruction that

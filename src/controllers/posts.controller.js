@@ -209,9 +209,20 @@ export async function createPost(req, res, next) {
       },
     });
 
+    // Attach any images selected on the compose form (best-effort per file).
+    if (Array.isArray(req.files) && req.files.length) {
+      for (const file of req.files) {
+        if (!file.mimetype?.startsWith("image/")) continue;
+        try {
+          await linkFileToPost(post.id, req.user.id, file);
+        } catch {
+          /* skip a bad file rather than fail the whole post */
+        }
+      }
+    }
+
     if (wantsJson(req)) return res.status(201).json({ post });
-    // Land on the edit screen so the user can optionally attach images
-    // (uploads require an existing post id).
+    // Land on the edit screen so the user can review/add more images.
     res.redirect(`/posts/${post.id}/edit`);
   } catch (err) {
     next(err);

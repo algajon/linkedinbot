@@ -15,7 +15,7 @@
   </ul>
 <% } %>
 
-<form action="/posts" method="post" class="post-form" data-max="<%= maxLength %>">
+<form action="/posts" method="post" enctype="multipart/form-data" class="post-form" data-max="<%= maxLength %>">
   <div class="post-form-grid">
     <div class="editor">
       <%- include("partials/ai-panel") %>
@@ -51,6 +51,12 @@
           </select>
         </label>
       </div>
+
+      <label>
+        <%= t("upload.image") %> <span class="muted">(JPEG, PNG, WebP — max 15 MB)</span>
+        <input type="file" id="new-images" name="images" accept="image/png,image/jpeg,image/webp" multiple />
+      </label>
+      <ul id="new-image-preview" class="image-grid"></ul>
 
       <button type="submit" class="btn primary" <%= linkedinReady ? "" : "disabled" %>><%= t("post.schedule") %></button>
     </div>

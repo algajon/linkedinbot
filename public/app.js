@@ -390,3 +390,24 @@ function wireLengthToggle(selectId, customId) {
   form.querySelectorAll('input[name="cadence"]').forEach((r) => r.addEventListener("change", sync));
   sync();
 })();
+
+// ---- New-post compose: preview selected images before scheduling ----------
+(function () {
+  const input = document.getElementById("new-images");
+  const preview = document.getElementById("new-image-preview");
+  if (!input || !preview) return;
+  input.addEventListener("change", function () {
+    preview.innerHTML = "";
+    Array.from(input.files || []).forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const li = document.createElement("li");
+      li.className = "image-item";
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.alt = file.name;
+      img.onload = () => URL.revokeObjectURL(img.src);
+      li.appendChild(img);
+      preview.appendChild(li);
+    });
+  });
+})();

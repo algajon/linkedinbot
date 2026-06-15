@@ -28,7 +28,7 @@ pageRouter.get("/files/:id", posts.serveFile);
 pageRouter.get("/queue", posts.renderQueue);
 pageRouter.get("/posts", posts.renderList);
 pageRouter.get("/posts/new", posts.renderNew);
-pageRouter.post("/posts", createLimiter, posts.createPost);
+pageRouter.post("/posts", createLimiter, upload.array("images", 9), posts.createPost);
 pageRouter.get("/posts/:id/edit", posts.renderEdit);
 // HTML forms only support GET/POST, so updates/cancel/retry/delete are POSTs.
 pageRouter.post("/posts/:id", posts.updatePost);
