@@ -106,6 +106,54 @@ function exemplarBlock(exemplars, { maxPosts = 10, maxChars = 14000 } = {}) {
   ].join("\n");
 }
 
+// Rules that strip the dead giveaways of AI-written posts. Injected into every
+// generation prompt; a post-processor (deAiify) enforces the hard ones too.
+const ANTI_AI_RULES = [
+  "Write like a real person, not an AI. Remove every tell that a post was AI-written:",
+  "- NEVER use em dashes or en dashes (— or –). Use a comma, period, or parentheses instead.",
+  "- No markdown whatsoever: no **bold**, no headings, and never the '**Label:** explanation' bullet pattern.",
+  "- Do NOT use bullet lists OR numbered lists ('-', '*', '•', '1.', '2.'). Write in short standalone lines or flowing sentences, the way the author actually does.",
+  "- Emojis only if natural for THIS author, and sparingly. Never decorative rows of emojis.",
+  "- Only use hashtags a real person in this field would actually use; no generic filler tags.",
+  "- Ban these clichés: game-changer, unlock, unleash, delve, elevate, leverage, robust, seamless, foster, embark, realm, tapestry, testament, ever-evolving, 'in today's fast-paced world', 'the power of', 'when it comes to', 'navigate the landscape', 'dive in', 'in conclusion'.",
+  "- Vary sentence length and rhythm; slight imperfection reads as human. Do not sound polished or templated.",
+];
+
+// Generic hashtags no real person uses — filtered out of generated tags.
+const BANNED_HASHTAGS = new Set(
+  [
+    "innovation", "success", "growth", "motivation", "mondaymotivation", "motivationmonday",
+    "inspiration", "digitaltransformation", "thoughtleadership", "leadership", "gamechanger",
+    "synergy", "hustle", "grind", "mindset", "excellence", "teamwork", "businessgrowth",
+    "entrepreneurship", "futureofwork", "goals", "winning", "passion", "dreambig",
+  ].map((s) => s.toLowerCase())
+);
+
+// Post-processor: hard-strip the AI tells the model may still produce.
+export function deAiify(text) {
+  let t = String(text);
+  t = t.replace(/ *[—–] */g, ", "); // spaced em/en dash (classic AI tell) -> comma
+  t = t.replace(/—/g, "-"); // any leftover em dash -> hyphen
+  t = t.replace(/(\D)\s*–\s*(\D)/g, "$1, $2"); // en dash between words -> comma (leave numeric ranges)
+  t = t.replace(/\*\*(.+?)\*\*/g, "$1"); // **bold** -> plain
+  t = t.replace(/(^|[\s(])__(.+?)__(?=[\s).,!?]|$)/g, "$1$2"); // __bold__ -> plain
+  t = t.replace(/^\s{0,3}#{1,6}\s+/gm, ""); // markdown headings (not #hashtags)
+  t = t.replace(/^\s{0,3}[-*•]\s+/gm, ""); // strip bullet markers -> plain short lines
+  t = t.replace(/^\s{0,3}[1-9][.)]\s+/gm, ""); // strip single-digit numbered-list markers
+  // Cap egregious emoji spam (backstop; the prompt + examples handle natural use).
+  let emoji = 0;
+  t = t.replace(/\p{Extended_Pictographic}/gu, (m) => (++emoji <= 6 ? m : ""));
+  t = t.replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+  // Drop any trailing hashtag block the model added — tags are managed/filtered
+  // separately and appended after, so we never want the model's own here.
+  const isHashtagLine = (l) => /^\s*(?:#[\p{L}\d_]+\s*)+$/u.test(l);
+  const lines = t.split("\n");
+  while (lines.length && (!lines[lines.length - 1].trim() || isHashtagLine(lines[lines.length - 1]))) {
+    lines.pop();
+  }
+  return lines.join("\n").trim();
+}
+
 // When the token cap clips a post mid-sentence, trim back to the last complete
 // sentence so it ends cleanly (only applied when the model was actually cut off).
 function tidyClippedTail(text) {
@@ -123,7 +171,9 @@ export async function generateHashtags({ text, provider, language, count = 4 } =
   if (!tagProvider || !String(text || "").trim()) return "";
   const sys = [
     "You are a LinkedIn hashtag specialist.",
-    `Pick exactly ${count} highly relevant, specific hashtags for the post below.`,
+    `Pick ${count} specific, niche hashtags a real practitioner in this field would actually use for the post below.`,
+    "Favor concrete product, industry, event, or topic tags. Mix in a couple the author themselves would use.",
+    "BANNED — never output generic filler tags like #Innovation #Success #Growth #Motivation #Inspiration #ThoughtLeadership #DigitalTransformation #GameChanger #Leadership #Mindset #Hustle. They scream 'AI-written'.",
     "Respond with ONLY the hashtags on a single line, space-separated, each in #CamelCase, no duplicates, no other text.",
     language ? `Prefer hashtags suited to ${languageName(language)} where natural; keep standard English tags when widely used.` : "",
   ]
@@ -143,10 +193,9 @@ export async function generateHashtags({ text, provider, language, count = 4 } =
     const uniq = [];
     for (const tag of found) {
       const k = tag.toLowerCase();
-      if (!seen.has(k)) {
-        seen.add(k);
-        uniq.push(tag);
-      }
+      if (seen.has(k) || BANNED_HASHTAGS.has(k.replace(/^#/, ""))) continue; // drop dupes + generic filler
+      seen.add(k);
+      uniq.push(tag);
     }
     return uniq.slice(0, count).join(" ");
   } catch {
@@ -211,8 +260,8 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars,
     "- Write ONLY the post body — no preamble, no quotation marks, no markdown headings.",
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for readability on mobile.",
-    "- Sound human and specific; avoid clichés, buzzword soup, and em-dash overuse.",
-    "- Do NOT add hashtags — they are generated separately and must not count toward the length budget.",
+    ...ANTI_AI_RULES,
+    "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     targetChars
       ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible, and finish your final sentence within the budget. Shorter is better than longer; cut every non-essential word.`
       : "",
@@ -269,8 +318,8 @@ export async function generatePost({ topic, tone, audience, language, length, ex
   if (data.choices?.[0]?.finish_reason === "length") {
     text = tidyClippedTail(text);
   }
-  // Hard cap on the body so it can never exceed LinkedIn's limit.
-  text = text.slice(0, MAX_POST_LENGTH);
+  // Strip AI tells, then hard cap on the body.
+  text = deAiify(text).slice(0, MAX_POST_LENGTH);
   // Hashtags via a separate request — always added, not counted in the length.
   const tags = await generateHashtags({ text, provider: openaiProvider(), language });
   return appendHashtags(text, tags);
@@ -299,8 +348,8 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Be ready to publish: no preamble, no quotation marks, no markdown headings.",
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for mobile readability.",
-    "- Sound human and specific; avoid clichés and buzzword soup.",
-    "- Do NOT add hashtags — they are generated separately and must not count toward the length budget.",
+    ...ANTI_AI_RULES,
+    "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
     `- Never exceed ${MAX_POST_LENGTH} characters.`,
     `Output the ${n} posts as plain text, separated by a line containing only:`,
@@ -342,9 +391,10 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   if (finishReason === "length" && posts.length) {
     posts[posts.length - 1] = tidyClippedTail(posts[posts.length - 1]);
   }
-  // Add fitting hashtags to each post via a separate request (not length-counted).
+  // Strip AI tells, then add fitting hashtags (not length-counted).
   const withTags = [];
-  for (const body of posts.slice(0, n)) {
+  for (const raw of posts.slice(0, n)) {
+    const body = deAiify(raw).slice(0, MAX_POST_LENGTH);
     const tags = await generateHashtags({ text: body, provider, language });
     withTags.push(appendHashtags(body, tags));
   }
