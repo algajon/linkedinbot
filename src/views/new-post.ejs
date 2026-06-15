@@ -1,11 +1,11 @@
 <%- include("partials/header") %>
 
-<h1>New post</h1>
+<h1><%= t("post.new") %></h1>
 
 <% if (!linkedinReady) { %>
   <p class="alert error">
-    You need a connected LinkedIn account before scheduling.
-    <a href="/auth/linkedin">Connect LinkedIn</a>.
+    <%= t("linkedin.needconnect") %>
+    <a href="/auth/linkedin"><%= t("linkedin.connect") %></a>.
   </p>
 <% } %>
 
@@ -20,22 +20,22 @@
     <div class="editor">
       <%- include("partials/ai-panel") %>
       <label>
-        Post content
+        <%= t("post.content") %>
         <textarea name="body" rows="10" maxlength="<%= maxLength %>" required><%= values.body %></textarea>
       </label>
       <p class="char-count"><span id="char-current"><%= values.body.length %></span> / <%= maxLength %></p>
 
       <div class="schedule-row">
         <label>
-          Date
+          <%= t("post.date") %>
           <input type="date" name="date" value="<%= values.date %>" required />
         </label>
         <label>
-          Time
+          <%= t("post.time") %>
           <input type="time" name="time" value="<%= values.time %>" required />
         </label>
         <label>
-          Timezone
+          <%= t("post.timezone") %>
           <select name="timezone" required>
             <% timezones.forEach((tz) => { %>
               <option value="<%= tz %>" <%= tz === values.timezone ? "selected" : "" %>><%= tz %></option>
@@ -43,7 +43,7 @@
           </select>
         </label>
         <label>
-          Post language
+          <%= t("post.language") %>
           <select name="language" id="post-language">
             <% postLanguages.forEach((l) => { %>
               <option value="<%= l.code %>" <%= l.code === (values.language || "en") ? "selected" : "" %>><%= l.label %></option>
@@ -52,14 +52,14 @@
         </label>
       </div>
 
-      <button type="submit" class="btn primary" <%= linkedinReady ? "" : "disabled" %>>Schedule post</button>
+      <button type="submit" class="btn primary" <%= linkedinReady ? "" : "disabled" %>><%= t("post.schedule") %></button>
     </div>
 
     <aside class="preview">
-      <h3>Preview</h3>
+      <h3><%= t("post.preview") %></h3>
       <div class="preview-card">
-        <div class="preview-author">Your LinkedIn profile</div>
-        <div id="preview-body" class="preview-body"><%= values.body %></div>
+        <div class="preview-author"><%= t("post.previewauthor") %></div>
+        <div id="preview-body" class="preview-body" data-empty="<%= t("post.previewempty") %>"><%= values.body %></div>
       </div>
     </aside>
   </div>

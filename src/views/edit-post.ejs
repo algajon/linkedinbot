@@ -1,7 +1,7 @@
 <%- include("partials/header") %>
 
-<h1>Edit post</h1>
-<p class="muted">Current status: <span class="badge badge-<%= post.status.toLowerCase() %>"><%= post.status %></span></p>
+<h1><%= t("post.edit") %></h1>
+<p class="muted"><%= t("post.status") %>: <span class="badge badge-<%= post.status.toLowerCase() %>"><%= post.status %></span></p>
 
 <% if (errors.length) { %>
   <ul class="alert error">
@@ -14,22 +14,22 @@
     <div class="editor">
       <%- include("partials/ai-panel") %>
       <label>
-        Post content
+        <%= t("post.content") %>
         <textarea name="body" rows="10" maxlength="<%= maxLength %>" required><%= values.body %></textarea>
       </label>
       <p class="char-count"><span id="char-current"><%= values.body.length %></span> / <%= maxLength %></p>
 
       <div class="schedule-row">
         <label>
-          Date
+          <%= t("post.date") %>
           <input type="date" name="date" value="<%= values.date %>" required />
         </label>
         <label>
-          Time
+          <%= t("post.time") %>
           <input type="time" name="time" value="<%= values.time %>" required />
         </label>
         <label>
-          Timezone
+          <%= t("post.timezone") %>
           <select name="timezone" required>
             <% timezones.forEach((tz) => { %>
               <option value="<%= tz %>" <%= tz === values.timezone ? "selected" : "" %>><%= tz %></option>
@@ -37,7 +37,7 @@
           </select>
         </label>
         <label>
-          Post language
+          <%= t("post.language") %>
           <select name="language" id="post-language">
             <% postLanguages.forEach((l) => { %>
               <option value="<%= l.code %>" <%= l.code === (values.language || "en") ? "selected" : "" %>><%= l.label %></option>
@@ -47,16 +47,16 @@
       </div>
 
       <div class="cta-row">
-        <button type="submit" class="btn primary">Save changes</button>
-        <a href="/posts" class="btn">Back</a>
+        <button type="submit" class="btn primary"><%= t("post.save") %></button>
+        <a href="/posts" class="btn"><%= t("common.back") %></a>
       </div>
     </div>
 
     <aside class="preview">
-      <h3>Preview</h3>
+      <h3><%= t("post.preview") %></h3>
       <div class="preview-card">
-        <div class="preview-author">Your LinkedIn profile</div>
-        <div id="preview-body" class="preview-body"><%= values.body %></div>
+        <div class="preview-author"><%= t("post.previewauthor") %></div>
+        <div id="preview-body" class="preview-body" data-empty="<%= t("post.previewempty") %>"><%= values.body %></div>
       </div>
     </aside>
   </div>
@@ -64,7 +64,7 @@
 
 <% const postFiles = (typeof files !== "undefined" && files) ? files : []; %>
 <section class="card images-card" id="images-card" data-post-id="<%= post.id %>">
-  <h3>Images <span class="muted">(JPEG, PNG, WebP — max 5 MB each)</span></h3>
+  <h3><%= t("upload.image") %> <span class="muted">(JPEG, PNG, WebP — max 15 MB)</span></h3>
   <p class="muted">Attached images are published with this post to LinkedIn.</p>
 
   <ul id="image-list" class="image-grid">
@@ -75,14 +75,14 @@
         <% } else { %>
           <span class="file-chip"><%= f.filename %></span>
         <% } %>
-        <button type="button" class="btn small danger remove-image">Remove</button>
+        <button type="button" class="btn small danger remove-image"><%= t("common.delete") %></button>
       </li>
     <% }) %>
   </ul>
 
   <div class="upload-row">
     <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp" />
-    <button type="button" id="image-upload-btn" class="btn">Upload image</button>
+    <button type="button" id="image-upload-btn" class="btn"><%= t("upload.image") %></button>
     <span id="upload-status" class="muted" role="status" aria-live="polite"></span>
   </div>
 </section>

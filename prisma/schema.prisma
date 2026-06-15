@@ -124,6 +124,7 @@ model UploadedFile {
   filename        String
   mimeType        String
   size            Int
+  data            Bytes?
   createdAt       DateTime @default(now())
 
   scheduledPost ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)

@@ -95,7 +95,7 @@ export async function generateFromSource(req, res) {
 
     res.status(201).json({ created: created.length, drafts: created.map((d) => ({ id: d.id })) });
   } catch (err) {
-    const status = /not configured|too little|no usable|unparseable/i.test(err.message) ? 400 : 502;
+    const status = /configured|too little|no usable|unparseable/i.test(err.message) ? 400 : 502;
     res.status(status).json({ error: err.message });
   }
 }

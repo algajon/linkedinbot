@@ -13,7 +13,7 @@
     const value = textarea.value;
     if (counter) counter.textContent = String(value.length);
     if (counterWrap) counterWrap.classList.toggle("over", value.length > max);
-    if (preview) preview.textContent = value || "Your post preview will appear here.";
+    if (preview) preview.textContent = value || preview.dataset.empty || "Your post preview will appear here.";
   }
 
   textarea.addEventListener("input", update);

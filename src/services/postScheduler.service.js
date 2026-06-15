@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getValidAccessToken } from "./token.service.js";
 import { publishLinkedInTextPost, uploadImageToLinkedIn } from "./linkedin.service.js";
-import { readUploadedFileBuffer } from "./upload.service.js";
+import { getPostImageFilesWithData } from "./upload.service.js";
 
 const BATCH_SIZE = 25;
 // A post stuck in PUBLISHING longer than this is considered abandoned (worker
@@ -37,18 +37,15 @@ async function publishLockedPost(post) {
     const accessToken = await getValidAccessToken(account);
 
     // Upload any attached images to LinkedIn first, collecting their URNs.
-    // Only image/* files are sent; other types (e.g. PDF) are skipped here.
-    const files = await prisma.uploadedFile.findMany({
-      where: { scheduledPostId: post.id, mimeType: { startsWith: "image/" } },
-      orderBy: { createdAt: "asc" },
-    });
+    // Bytes come from the DB (no filesystem dependency). PDFs are skipped here.
+    const files = await getPostImageFilesWithData(post.id);
     const mediaUrns = [];
     for (const file of files) {
-      const buffer = await readUploadedFileBuffer(file.filename);
+      if (!file.data) continue; // legacy disk-only rows have no bytes
       const urn = await uploadImageToLinkedIn({
         accessToken,
         authorUrn: post.authorUrn,
-        buffer,
+        buffer: Buffer.from(file.data),
         mimeType: file.mimeType,
       });
       mediaUrns.push(urn);

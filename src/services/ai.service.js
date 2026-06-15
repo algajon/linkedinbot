@@ -6,6 +6,78 @@ import { languageName } from "../utils/postLanguages.js";
 
 const COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
+// ---- LLM providers -------------------------------------------------------
+// vLLM on the on-prem DGX Spark cluster is OpenAI-compatible, so a provider is
+// just a base URL + key + model (+ optional headers). Source generation runs
+// the user's internal documents through the local cluster when configured, so
+// that data never leaves the network. Falls back to OpenAI otherwise.
+
+function openaiProvider() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  return {
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey,
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    headers: {},
+    supportsJsonMode: true,
+  };
+}
+
+// On-prem DGX Spark (vLLM). Only reachable from inside the LAN/VPN.
+function dgxProvider() {
+  const baseUrl = (process.env.DGX_BASE_URL || "").trim().replace(/\/+$/, "");
+  const apiKey = process.env.DGX_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+  const headers = {};
+  const tier = (process.env.DGX_LLM_TIER || "").trim();
+  if (tier) headers["X-LLM-Tier"] = tier; // fast | heavy
+  return {
+    name: "DGX Spark (on-prem)",
+    baseUrl,
+    apiKey,
+    model: process.env.DGX_MODEL || "Qwen/Qwen2.5-72B-Instruct",
+    headers,
+    // vLLM's response_format support varies by version — rely on prompt + parse.
+    supportsJsonMode: false,
+    // Qwen3 reasoning models emit chain-of-thought; disable it at the template
+    // level (ignored harmlessly by non-reasoning models).
+    extraBody: { chat_template_kwargs: { enable_thinking: false } },
+  };
+}
+
+// Provider for source-based generation: prefer the internal cluster so source
+// documents stay on-prem; fall back to OpenAI if DGX isn't configured.
+function sourceProvider() {
+  return dgxProvider() || openaiProvider();
+}
+
+// Low-level OpenAI-compatible chat call against any provider.
+async function chatCompletion(provider, { messages, temperature = 0.8, maxTokens = 800, jsonMode = false }) {
+  const body = { model: provider.model, messages, temperature, max_tokens: maxTokens, ...(provider.extraBody || {}) };
+  if (jsonMode && provider.supportsJsonMode) body.response_format = { type: "json_object" };
+
+  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${provider.apiKey}`,
+      "Content-Type": "application/json",
+      ...provider.headers,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`${provider.name} request failed: ${res.status} ${errBody.slice(0, 400)}`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error(`${provider.name} returned an empty response.`);
+  return content;
+}
+
+
 // Preset tones map a short key to a richer instruction the model can act on.
 // A free-text tone (anything not in this map) is passed through verbatim.
 export const TONE_PRESETS = {
@@ -110,16 +182,15 @@ export async function generatePost({ topic, tone, audience, language } = {}) {
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
 export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language } = {}) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+  const provider = sourceProvider();
+  if (!provider) {
+    throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
   }
   const source = String(sourceText || "").trim();
   if (source.length < 40) {
     throw new Error("The content source has too little text to generate from.");
   }
   const n = Math.max(1, Math.min(7, parseInt(count, 10) || 3));
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const systemPrompt = [
     "You are an expert LinkedIn ghostwriter. Using the SOURCE MATERIAL provided, write original LinkedIn posts.",
@@ -134,47 +205,39 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Sound human and specific; avoid clichés and buzzword soup.",
     "- Optionally end with 3-5 relevant hashtags on their own line.",
     `- Stay under ${MAX_POST_LENGTH} characters.`,
-    'Respond with ONLY a JSON object of the form {"posts": ["<post 1>", "<post 2>", ...]} containing exactly ' + n + " strings.",
+    `Output the ${n} posts as plain text, separated by a line containing only:`,
+    "===POST===",
+    "Do not number them and write nothing before the first post or after the last.",
   ]
     .filter(Boolean)
     .join("\n");
 
-  const res = await fetch(COMPLETIONS_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
-      ],
-      temperature: 0.85,
-      max_tokens: 600 * n,
-      response_format: { type: "json_object" },
-    }),
+  // eslint-disable-next-line no-console
+  console.log(`[ai] source generation via ${provider.name} (${provider.model})`);
+  const content = await chatCompletion(provider, {
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 12000)}` },
+    ],
+    temperature: 0.85,
+    maxTokens: 600 * n,
   });
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`OpenAI request failed: ${res.status} ${errBody.slice(0, 500)}`);
-  }
-
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim();
-  let posts = [];
-  try {
-    const parsed = JSON.parse(content);
-    posts = Array.isArray(parsed) ? parsed : parsed.posts || [];
-  } catch {
-    throw new Error("OpenAI returned an unparseable response.");
-  }
-  posts = posts
-    .filter((p) => typeof p === "string" && p.trim())
-    .map((p) => p.trim().slice(0, MAX_POST_LENGTH));
+  // Posts are separated by a delimiter line. This is robust to multi-line post
+  // bodies and works across providers (no JSON-escaping pitfalls). Strip any
+  // reasoning <think> block first (reasoning models).
+  const posts = content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^```[a-z]*\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .split(/\r?\n?\s*={2,}\s*POST\s*={2,}\s*\r?\n?/i)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => p.slice(0, MAX_POST_LENGTH));
   if (!posts.length) {
-    throw new Error("OpenAI returned no usable posts.");
+    throw new Error(`${provider.name} returned no usable posts.`);
   }
-  return posts;
+  return posts.slice(0, n);
 }
 
 // Analyze example posts and distill a reusable tone-of-voice instruction that

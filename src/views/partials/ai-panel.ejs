@@ -1,46 +1,46 @@
 <% if (aiEnabled) { %>
   <% const saved = (typeof savedTones !== "undefined" && savedTones) ? savedTones : []; %>
   <div class="ai-panel">
-    <h3>Generate with AI</h3>
+    <h3><%= t("ai.generate") %></h3>
     <label>
-      What should the post be about?
-      <textarea id="ai-topic" rows="2" placeholder="e.g. three lessons from scaling our engineering team to 50 people"></textarea>
+      <%= t("ai.topic") %>
+      <textarea id="ai-topic" rows="2" placeholder="<%= t("ai.placeholder") %>"></textarea>
     </label>
     <div class="ai-controls">
       <label>
-        Tone of voice
+        <%= t("ai.tone") %>
         <select id="ai-tone">
           <% if (saved.length) { %>
-            <optgroup label="Your saved voices">
+            <optgroup label="Saved voices">
               <% saved.forEach((p) => { %>
                 <option value="saved:<%= p.id %>" data-instruction="<%= p.instruction.replace(/"/g, '&quot;') %>"><%= p.name %></option>
               <% }) %>
             </optgroup>
           <% } %>
-          <optgroup label="Built-in tones">
-            <% Object.entries(tonePresets).forEach(([key, t]) => { %>
-              <option value="<%= key %>"><%= t.label %></option>
+          <optgroup label="Built-in">
+            <% Object.entries(tonePresets).forEach(([key, tp]) => { %>
+              <option value="<%= key %>"><%= tp.label %></option>
             <% }) %>
-            <option value="__custom__">Custom…</option>
+            <option value="__custom__"><%= t("tone.custom") %></option>
           </optgroup>
         </select>
       </label>
       <label>
-        Audience <span class="muted">(optional)</span>
-        <input id="ai-audience" type="text" placeholder="e.g. early-stage founders" />
+        <%= t("ai.audience") %> <span class="muted">(<%= t("ai.audience.optional") %>)</span>
+        <input id="ai-audience" type="text" placeholder="<%= t("ai.audience.placeholder") %>" />
       </label>
     </div>
     <label id="ai-custom-wrap" hidden>
-      Custom tone
-      <input id="ai-custom-tone" type="text" placeholder="Describe the voice — e.g. witty, irreverent, a little contrarian" />
+      <%= t("ai.custom") %>
+      <input id="ai-custom-tone" type="text" placeholder="<%= t("ai.custom.placeholder") %>" />
     </label>
     <div class="ai-actions">
-      <button type="button" id="ai-generate" class="btn primary">Generate draft</button>
+      <button type="button" id="ai-generate" class="btn primary"><%= t("ai.button") %></button>
       <span id="ai-status" class="muted" role="status" aria-live="polite"></span>
     </div>
 
     <details class="learn-tone">
-      <summary>Learn a tone from examples</summary>
+      <summary><%= t("ai.learn") %></summary>
       <p class="muted">Paste a few real posts written in a voice you want to reuse. We'll distill it into a saved preset you can pick above.</p>
       <label>
         Example posts

@@ -3,7 +3,7 @@ import { validatePostInput, MAX_POST_LENGTH } from "../utils/validation.js";
 import { formatInZone, defaultLocalParts, COMMON_TIMEZONES } from "../utils/date.js";
 import { DateTime } from "luxon";
 import { retryPost as retryPostService } from "../services/postScheduler.service.js";
-import { linkFileToPost, getPostFiles, removeFileFromPost } from "../services/upload.service.js";
+import { linkFileToPost, getPostFiles, removeFileFromPost, getOwnedFileWithData } from "../services/upload.service.js";
 import { getActiveRoutine, computeUpcomingSlots } from "../services/routine.service.js";
 import { normalizePostLanguage } from "../utils/postLanguages.js";
 
@@ -334,6 +334,20 @@ export async function removeFile(req, res, next) {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+}
+
+// Stream a stored file's bytes from the DB (owner-scoped). Used by <img> tags;
+// the browser sends the session cookie so requireAuth applies.
+export async function serveFile(req, res, next) {
+  try {
+    const file = await getOwnedFileWithData(req.params.id, req.user.id);
+    if (!file || !file.data) return res.status(404).send("Not found");
+    res.set("Content-Type", file.mimeType);
+    res.set("Cache-Control", "private, max-age=86400");
+    res.send(Buffer.from(file.data));
+  } catch (err) {
+    next(err);
   }
 }
 

@@ -94,6 +94,20 @@ the browser.
 | POST | `/api/posts/:id/retry` | Retry failed |
 | POST | `/internal/publish-due-posts` | Cron trigger (needs `x-internal-cron-secret`) |
 
+## On-prem LLM (sovereign AI)
+
+PDF-based draft generation can run against an internal **DGX Spark / vLLM**
+cluster instead of OpenAI, so document content never leaves the network. Set
+`DGX_BASE_URL`, `DGX_API_KEY`, `DGX_MODEL`, and optionally `DGX_LLM_TIER`
+(`fast` | `heavy`). When configured, *source generation* prefers the DGX
+cluster and falls back to OpenAI only if it isn't set. vLLM is OpenAI-compatible;
+reasoning output is suppressed via `chat_template_kwargs.enable_thinking=false`,
+and posts are returned as delimiter-separated text (robust to multi-line bodies).
+
+The cluster is LAN/VPN-only, so this works when the app runs **on-prem or in the
+office network** — not from a public cloud host (which transparently falls back
+to OpenAI). Topic-based generation and tone-learning still use OpenAI.
+
 ## Deployment
 
 Free-tier setup: a Render **free** web service + external Postgres (Neon/Supabase

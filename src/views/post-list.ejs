@@ -1,28 +1,28 @@
 <%- include("partials/header") %>
 
 <div class="list-head">
-  <h1>Posts</h1>
-  <a class="btn primary" href="/posts/new">New post</a>
+  <h1><%= t("nav.posts") %></h1>
+  <a class="btn primary" href="/posts/new"><%= t("post.new") %></a>
 </div>
 
 <nav class="filters">
-  <% const tabs = [["", "All"], ["SCHEDULED", "Scheduled"], ["PUBLISHED", "Published"], ["FAILED", "Failed"], ["CANCELED", "Canceled"]]; %>
+  <% const tabs = [["", t("filter.all")], ["SCHEDULED", t("filter.scheduled")], ["PUBLISHED", t("filter.published")], ["FAILED", t("filter.failed")], ["CANCELED", t("filter.canceled")]]; %>
   <% tabs.forEach(([value, label]) => { %>
     <a href="/posts<%= value ? "?status=" + value : "" %>" class="filter <%= filter === value ? "active" : "" %>"><%= label %></a>
   <% }) %>
 </nav>
 
 <% if (posts.length === 0) { %>
-  <p class="muted">No posts found.</p>
+  <p class="muted"><%= t("posts.none") %></p>
 <% } else { %>
   <table class="post-table">
     <thead>
       <tr>
-        <th>Status</th>
-        <th>Content</th>
-        <th>Scheduled</th>
-        <th>Timezone</th>
-        <th>Actions</th>
+        <th><%= t("post.status") %></th>
+        <th><%= t("th.content") %></th>
+        <th><%= t("th.scheduled") %></th>
+        <th><%= t("post.timezone") %></th>
+        <th><%= t("th.actions") %></th>
       </tr>
     </thead>
     <tbody>
@@ -39,21 +39,21 @@
           <td><%= p.timezone %></td>
           <td class="row-actions">
             <% if (["SCHEDULED", "DRAFT", "FAILED"].includes(p.status)) { %>
-              <a href="/posts/<%= p.id %>/edit" class="btn small">Edit</a>
+              <a href="/posts/<%= p.id %>/edit" class="btn small"><%= t("post.edit") %></a>
             <% } %>
             <% if (p.status === "FAILED") { %>
               <form action="/posts/<%= p.id %>/retry" method="post" class="inline">
-                <button type="submit" class="btn small">Retry</button>
+                <button type="submit" class="btn small"><%= t("post.retry") %></button>
               </form>
             <% } %>
             <% if (["SCHEDULED", "DRAFT"].includes(p.status)) { %>
               <form action="/posts/<%= p.id %>/cancel" method="post" class="inline" onsubmit="return confirm('Cancel this post?');">
-                <button type="submit" class="btn small danger">Cancel</button>
+                <button type="submit" class="btn small danger"><%= t("post.cancel") %></button>
               </form>
             <% } %>
             <% if (p.status !== "PUBLISHING") { %>
               <form action="/posts/<%= p.id %>/delete" method="post" class="inline" onsubmit="return confirm('Delete this post permanently?');">
-                <button type="submit" class="btn small ghost">Delete</button>
+                <button type="submit" class="btn small ghost"><%= t("post.delete") %></button>
               </form>
             <% } %>
           </td>

@@ -24,6 +24,7 @@ export const pageRouter = Router();
 pageRouter.use(requireAuth);
 
 pageRouter.get("/dashboard", posts.renderDashboard);
+pageRouter.get("/files/:id", posts.serveFile);
 pageRouter.get("/queue", posts.renderQueue);
 pageRouter.get("/posts", posts.renderList);
 pageRouter.get("/posts/new", posts.renderNew);

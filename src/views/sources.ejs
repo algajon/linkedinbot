@@ -1,25 +1,25 @@
 <%- include("partials/header") %>
 
-<h1>Content sources</h1>
-<p class="muted">Upload a PDF (a brief, one-pager, article…). We extract its text and use it as source material to draft posts — which land in your <a href="/queue">approval queue</a>.</p>
+<h1><%= t("sources.title") %></h1>
+<p class="muted">Upload a PDF (a brief, one-pager, article…). We extract its text and use it as source material to draft posts — which land in your <a href="/queue"><%= t("queue.title") %></a>.</p>
 
 <% if (!linkedinReady) { %>
-  <p class="alert error">Connect your LinkedIn account before generating posts. <a href="/auth/linkedin">Connect LinkedIn</a>.</p>
+  <p class="alert error"><%= t("linkedin.needconnect") %> <a href="/auth/linkedin"><%= t("linkedin.connect") %></a>.</p>
 <% } %>
 
 <section class="card">
-  <h3>Upload a PDF</h3>
+  <h3><%= t("sources.upload") %></h3>
   <div class="upload-row">
     <input type="file" id="source-input" accept="application/pdf" />
-    <button type="button" id="source-upload-btn" class="btn">Upload &amp; parse</button>
+    <button type="button" id="source-upload-btn" class="btn"><%= t("sources.uploadbtn") %></button>
     <span id="source-status" class="muted" role="status" aria-live="polite"></span>
   </div>
 </section>
 
 <section class="card">
-  <h3>Your sources</h3>
+  <h3><%= t("sources.your") %></h3>
   <% if (!sources.length) { %>
-    <p class="muted" id="no-sources">No sources yet — upload a PDF above.</p>
+    <p class="muted" id="no-sources"><%= t("sources.none") %></p>
   <% } %>
   <ul id="source-list" class="post-mini-list">
     <% sources.forEach((s) => { %>
@@ -27,18 +27,18 @@
         <strong><%= s.name %></strong>
         <span class="muted">· <%= s.charCount %> chars</span>
         <span class="row-actions">
-          <button type="button" class="btn small generate-from" data-source-id="<%= s.id %>">Generate drafts</button>
-          <button type="button" class="btn small ghost delete-source" data-source-id="<%= s.id %>">Delete</button>
+          <button type="button" class="btn small generate-from" data-source-id="<%= s.id %>"><%= t("sources.generate") %></button>
+          <button type="button" class="btn small ghost delete-source" data-source-id="<%= s.id %>"><%= t("common.delete") %></button>
         </span>
       </li>
     <% }) %>
   </ul>
 
   <div class="generate-panel card" id="generate-panel" hidden>
-    <h3>Generate drafts</h3>
+    <h3><%= t("sources.generate") %></h3>
     <div class="ai-controls">
       <label>
-        Tone of voice
+        <%= t("ai.tone") %>
         <select id="gen-tone">
           <% if (savedTones && savedTones.length) { %>
             <optgroup label="Your saved voices">
@@ -55,7 +55,7 @@
         </select>
       </label>
       <label>
-        Post language
+        <%= t("post.language") %>
         <select id="gen-language">
           <% postLanguages.forEach((l) => { %>
             <option value="<%= l.code %>"><%= l.label %></option>
@@ -63,16 +63,16 @@
         </select>
       </label>
       <label>
-        How many drafts?
+        <%= t("sources.count") %>
         <input type="number" id="gen-count" min="1" max="7" value="3" />
       </label>
       <label>
-        Audience <span class="muted">(optional)</span>
+        <%= t("ai.audience") %> <span class="muted">(<%= t("ai.audience.optional") %>)</span>
         <input type="text" id="gen-audience" placeholder="e.g. IT decision-makers" />
       </label>
     </div>
     <div class="ai-actions">
-      <button type="button" id="gen-run" class="btn primary" <%= linkedinReady ? "" : "disabled" %>>Generate drafts</button>
+      <button type="button" id="gen-run" class="btn primary" <%= linkedinReady ? "" : "disabled" %>><%= t("sources.generate") %></button>
       <span id="gen-status" class="muted" role="status" aria-live="polite"></span>
     </div>
   </div>
