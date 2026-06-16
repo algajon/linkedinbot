@@ -156,6 +156,10 @@ export function deAiify(text) {
   // Cap egregious emoji spam (backstop; the prompt + examples handle natural use).
   let emoji = 0;
   t = t.replace(/\p{Extended_Pictographic}/gu, (m) => (++emoji <= 6 ? m : ""));
+  // Straighten the typographic marks AI reaches for but people rarely type by hand.
+  t = t.replace(/[‘’‚‛]/g, "'"); // curly single quotes / apostrophes
+  t = t.replace(/[“”„‟]/g, '"'); // curly double quotes
+  t = t.replace(/…/g, "..."); // ellipsis character
   t = t.replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   // Drop any trailing hashtag block the model added — tags are managed/filtered
   // separately and appended after, so we never want the model's own here.
@@ -378,6 +382,38 @@ async function refineDraft(provider, { draft, voiceSystem, targetChars, grounded
   }
 }
 
+// The single biggest "this is AI" giveaway is the polished LinkedIn template:
+// punchy hook, one-line-per-thought cadence, a tidy lesson, an inspirational
+// closer. This pass deliberately roughs that up into something a real person
+// would type, in THIS author's voice. It runs LAST so it has the final word.
+const HUMANIZE_RULES = [
+  "Make it read like a real person typed it in one sitting, not like polished marketing or AI copy.",
+  "- Cut throat-clearing and meta openers: no 'Here's the thing', 'Let's be honest', 'In a world where', 'Imagine...', 'We've all been there', 'Picture this'.",
+  "- Break the formulaic LinkedIn shape: do NOT use the hook / short-line / tidy-lesson / inspirational-closer template, and do NOT put every sentence on its own line all the way down.",
+  "- No grand sign-offs or thesis-restating closers: drop 'The future is...', 'One thing is clear', 'At the end of the day', 'The bottom line', 'Remember:'.",
+  "- Kill the contrast gimmick 'It's not just X, it's Y' and rule-of-three lists used only for rhythm.",
+  "- Prefer one concrete detail (a name, a number, a specific moment) over any abstract claim. If a sentence could sit on anyone's post, cut or sharpen it.",
+  "- Vary the rhythm: short blunt sentences next to a longer one. A little unevenness reads as human.",
+  "- Contractions are fine. Starting with And/But/So is fine. State an opinion flatly without hedging. Don't add a moral or over-explain, trust the reader.",
+];
+
+// Final pass: rewrite a polished draft to sound unmistakably human, re-anchored
+// on the author's real voice/examples. Keeps topic, facts, and meaning.
+async function humanizeDraft(provider, { draft, voiceSystem, targetChars } = {}) {
+  const sys = [
+    voiceSystem, // re-asserts the author's voice + few-shot exemplars + anti-AI rules
+    "Rewrite the post below so it sounds like THIS author actually wrote it. Keep the same topic, facts, and meaning, but remove every trace of AI phrasing and structure.",
+    ...HUMANIZE_RULES,
+    `Keep it around ${targetChars} characters. Output ONLY the rewritten post, nothing else.`,
+  ].join("\n");
+  try {
+    const out = await draftPost(provider, { system: sys, user: draft, targetChars, temperature: 0.85 });
+    return out && out.length > 40 ? out : draft;
+  } catch {
+    return draft;
+  }
+}
+
 // Thrown when the editorial gate decides this author shouldn't post a topic.
 export class TopicUnsuitableError extends Error {
   constructor(reason) {
@@ -463,7 +499,10 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 
   // Judge-pick the strongest, then a self-refine pass to lift it further.
   let best = QUALITY ? await judgeBest(provider, drafts) : drafts[0];
-  if (QUALITY) best = await refineDraft(provider, { draft: best, voiceSystem, targetChars: target });
+  if (QUALITY) {
+    best = await refineDraft(provider, { draft: best, voiceSystem, targetChars: target });
+    best = await humanizeDraft(provider, { draft: best, voiceSystem, targetChars: target });
+  }
   best = best.slice(0, MAX_POST_LENGTH);
 
   // Hashtags via a separate request — always added, not counted in the length.
@@ -525,7 +564,10 @@ export async function generatePostsFromSource({
     const user = `SOURCE MATERIAL:\n\n${source.slice(0, 40000)}\n\nWrite one LinkedIn post now.`;
     let body = await draftPost(provider, { system, user, targetChars: target, temperature: 0.9 }).catch(() => "");
     if (!body) continue;
-    if (QUALITY) body = await refineDraft(provider, { draft: body, voiceSystem, targetChars: target, grounded: true });
+    if (QUALITY) {
+      body = await refineDraft(provider, { draft: body, voiceSystem, targetChars: target, grounded: true });
+      body = await humanizeDraft(provider, { draft: body, voiceSystem, targetChars: target });
+    }
     body = body.slice(0, MAX_POST_LENGTH);
     priorHooks.push(body.split("\n")[0].slice(0, 60));
     const tags = await generateHashtags({ text: body, provider, language });
