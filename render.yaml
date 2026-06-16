@@ -41,7 +41,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: gpt-4o
 
 # Free-tier deployment: web service on Render's free plan + external Postgres
 # (Neon/Supabase free tier, set via DATABASE_URL) + an external hourly cron

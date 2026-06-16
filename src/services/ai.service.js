@@ -20,7 +20,7 @@ function openaiProvider() {
     name: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     apiKey,
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    model: process.env.OPENAI_MODEL || "gpt-4o",
     headers: {},
     supportsJsonMode: true,
   };
@@ -589,7 +589,7 @@ export async function learnToneFromExamples(samples) {
     throw new Error("Paste at least one full example post (a bit more text) to learn a tone.");
   }
 
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = process.env.OPENAI_MODEL || "gpt-4o";
   const systemPrompt = [
     "You are a writing-style analyst. You are given one or more real LinkedIn posts written by the same person.",
     "Produce a precise, reusable TONE-OF-VOICE BRIEF that another writer could follow to reproduce this exact voice on new topics.",
