@@ -58,15 +58,28 @@ async function processWatch(w) {
     }
   }
 
-  const [body] = await generatePostsFromSource({
-    sourceText: text,
-    tone,
-    exemplars,
-    language: w.language,
-    length: "medium",
-    count: 1,
-    stance: w.stance || "take",
-  });
+  let body;
+  try {
+    [body] = await generatePostsFromSource({
+      sourceText: text,
+      tone,
+      exemplars,
+      language: w.language,
+      length: "medium",
+      count: 1,
+      stance: w.stance || "take",
+    });
+  } catch (e) {
+    if (e.code === "TOPIC_UNSUITABLE") {
+      // Not a fit for this author — mark seen so we don't reconsider it, skip.
+      await prisma.newsWatch.update({
+        where: { id: w.id },
+        data: { seenUrls: [...seen, fresh.url].slice(-SEEN_CAP), lastRunAt: new Date() },
+      });
+      return false;
+    }
+    throw e;
+  }
   if (!body) return false;
 
   await prisma.scheduledPost.create({

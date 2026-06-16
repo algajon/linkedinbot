@@ -175,6 +175,10 @@ export async function generateFromSource(req, res) {
 
     res.status(201).json({ created: created.length, drafts: created.map((d) => ({ id: d.id })) });
   } catch (err) {
+    // Editorial gate declined the topic — not an error, just a skip with a reason.
+    if (err.code === "TOPIC_UNSUITABLE") {
+      return res.status(200).json({ created: 0, skipped: true, reason: err.reason });
+    }
     const status = /configured|too little|no usable|unparseable/i.test(err.message) ? 400 : 502;
     res.status(status).json({ error: err.message });
   }

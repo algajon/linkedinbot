@@ -119,6 +119,19 @@ const ANTI_AI_RULES = [
   "- Vary sentence length and rhythm; slight imperfection reads as human. Do not sound polished or templated.",
 ];
 
+// Keep a post on a single subject (no bait-and-switch). Applied to every post.
+const COHERENCE_RULES = [
+  "- Stay on ONE subject from the first line to the last. Never pivot from the topic into a generic business lesson, a productivity/safety tip, self-promotion, or an unrelated call-to-action.",
+  "- If you end with a question, it must be about the SAME subject as the post, not a bolted-on engagement prompt.",
+];
+
+// For tragedies / sensitive events: be human, never self-serving.
+const SENSITIVITY_RULES = [
+  "- This concerns a sensitive event (loss of life, tragedy, disaster, violence, or similar). Be sincere and human.",
+  "- Do NOT turn it into a business lesson, a tip for 'your projects', marketing, or self-promotion.",
+  "- Do NOT add an engagement-bait question or call-to-action. A short, respectful reflection is enough.",
+];
+
 // Generic hashtags no real person uses — filtered out of generated tags.
 const BANNED_HASHTAGS = new Set(
   [
@@ -276,6 +289,7 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars,
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for readability on mobile.",
     ...ANTI_AI_RULES,
+    ...COHERENCE_RULES,
     "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     targetChars
       ? `- LENGTH BUDGET: about ${targetChars} characters maximum. Be ruthlessly concise — convey the full idea in as few words as possible, and finish your final sentence within the budget. Shorter is better than longer; cut every non-essential word.`
@@ -364,6 +378,57 @@ async function refineDraft(provider, { draft, voiceSystem, targetChars, grounded
   }
 }
 
+// Thrown when the editorial gate decides this author shouldn't post a topic.
+export class TopicUnsuitableError extends Error {
+  constructor(reason) {
+    super(reason || "This topic isn't a natural fit for this author.");
+    this.code = "TOPIC_UNSUITABLE";
+    this.reason = reason || "Not a natural fit for this author.";
+  }
+}
+
+// Editorial gate: given source material and the author's voice/domain, decide
+// whether THIS author should post about it, whether it's sensitive, and the
+// appropriate angle. Conservative by design (declines newsjacking/off-topic).
+export async function assessTopic(provider, { sourceText, voiceInstruction, exemplars } = {}) {
+  if (!provider) return { shouldPost: true, sensitive: false, angle: "", reason: "" };
+  const domain = (exemplars || [])
+    .slice(0, 4)
+    .map((e) => e.split("\n")[0].slice(0, 80))
+    .join(" | ");
+  const sys = [
+    "You are the editorial gatekeeper for ONE specific LinkedIn author.",
+    voiceInstruction ? `Author voice/brief: ${String(voiceInstruction).slice(0, 800)}` : "",
+    domain ? `The author normally posts about: ${domain}` : "",
+    "Decide whether this author should post about the material below, and how.",
+    'Return ONLY JSON: {"shouldPost": boolean, "sensitive": boolean, "angle": "<one sentence>", "reason": "<brief>"}.',
+    "shouldPost=false if the subject is outside the author's field, or a tragedy/disaster/loss/politics they have no genuine standing to comment on, or anything that would read as newsjacking. When unsure about relevance or taste, choose false.",
+    "sensitive=true for loss of life, tragedy, disaster, violence, layoffs, politics, or similar; then the angle must be respectful with no business lesson, no self-promotion, and no engagement-bait question.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  try {
+    const { content } = await chatCompletion(provider, {
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: String(sourceText).slice(0, 6000) },
+      ],
+      temperature: 0.1,
+      maxTokens: 200,
+    });
+    const m = content.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/\{[\s\S]*\}/);
+    const j = m ? JSON.parse(m[0]) : {};
+    return {
+      shouldPost: j.shouldPost !== false,
+      sensitive: Boolean(j.sensitive),
+      angle: typeof j.angle === "string" ? j.angle : "",
+      reason: typeof j.reason === "string" ? j.reason : "",
+    };
+  } catch {
+    return { shouldPost: true, sensitive: false, angle: "", reason: "" }; // fail open on parser/transient errors
+  }
+}
+
 // Generate a LinkedIn post. `topic` is what the post should be about.
 export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -417,6 +482,12 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   }
   const n = Math.max(1, Math.min(7, parseInt(count, 10) || 3));
 
+  // Editorial gate: should this author post this at all, and how?
+  const assessment = await assessTopic(provider, { sourceText: source, voiceInstruction: resolveTone(tone), exemplars });
+  if (!assessment.shouldPost) throw new TopicUnsuitableError(assessment.reason);
+  const sensitive = assessment.sensitive;
+  const effStance = sensitive ? "" : stance; // never apply a provocative stance to a tragedy
+
   const systemPrompt = [
     "You are an expert LinkedIn ghostwriter. Using the SOURCE MATERIAL provided, write original LinkedIn posts.",
     `Tone of voice: ${resolveTone(tone)}`,
@@ -429,10 +500,15 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Use short paragraphs and line breaks for mobile readability.",
     "- Ground every claim, number, name, and fact strictly in the SOURCE MATERIAL. Never invent statistics, quotes, or details that are not in the source.",
     "- Carry one clear idea and end with a takeaway or a natural question.",
-    resolveStance(stance)
-      ? `- ANGLE: ${resolveStance(stance)} This is the author's commentary/opinion on the material, not a neutral summary — but every fact must still come from the source.`
+    !sensitive && resolveStance(effStance)
+      ? `- ANGLE: ${resolveStance(effStance)} This is the author's commentary/opinion on the material, not a neutral summary — but every fact must still come from the source.`
+      : "",
+    !sensitive && !resolveStance(effStance) && assessment.angle
+      ? `- ANGLE: ${assessment.angle}`
       : "",
     ...ANTI_AI_RULES,
+    ...COHERENCE_RULES,
+    ...(sensitive ? SENSITIVITY_RULES : []),
     "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
     `- Never exceed ${MAX_POST_LENGTH} characters.`,

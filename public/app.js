@@ -430,7 +430,11 @@ function wireLengthToggle(selectId, customId) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Generation failed.");
-        genStatus.innerHTML = "Created " + data.created + ' drafts. <a href="/queue">Review in the queue →</a>';
+        if (data.skipped) {
+          genStatus.textContent = "Skipped — not a fit for this author: " + (data.reason || "");
+        } else {
+          genStatus.innerHTML = "Created " + data.created + ' drafts. <a href="/queue">Review in the queue →</a>';
+        }
       } catch (err) {
         genStatus.textContent = err.message;
       } finally {
