@@ -305,7 +305,7 @@ function wireLengthToggle(selectId, customId) {
       if (genPanel) {
         genPanel.hidden = false;
         genPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        genStatus.textContent = "Generating from: " + (item.querySelector("strong")?.textContent || "source");
+        genStatus.textContent = "Editing: " + (item.querySelector("strong")?.textContent || "source") + " — choose options, then Generate drafts.";
       }
     });
   }
@@ -319,7 +319,7 @@ function wireLengthToggle(selectId, customId) {
     item.innerHTML =
       "<strong></strong> <span class=\"muted\">· " + source.charCount + " chars</span>" +
       '<span class="row-actions">' +
-      '<button type="button" class="btn small generate-from" data-source-id="' + source.id + '">Generate drafts</button> ' +
+      '<button type="button" class="btn small generate-from" data-source-id="' + source.id + '">Edit drafts</button> ' +
       '<button type="button" class="btn small ghost delete-source" data-source-id="' + source.id + '">Delete</button>' +
       "</span>";
     item.querySelector("strong").textContent = source.name; // safe against HTML in titles
