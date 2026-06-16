@@ -312,6 +312,74 @@ function wireLengthToggle(selectId, customId) {
 
   if (list) list.querySelectorAll(".source-item").forEach((el) => { wireDelete(el); wireGenerate(el); });
 
+  function addSourceItem(source) {
+    const item = document.createElement("li");
+    item.className = "source-item";
+    item.dataset.sourceId = source.id;
+    item.innerHTML =
+      "<strong></strong> <span class=\"muted\">· " + source.charCount + " chars</span>" +
+      '<span class="row-actions">' +
+      '<button type="button" class="btn small generate-from" data-source-id="' + source.id + '">Generate drafts</button> ' +
+      '<button type="button" class="btn small ghost delete-source" data-source-id="' + source.id + '">Delete</button>' +
+      "</span>";
+    item.querySelector("strong").textContent = source.name; // safe against HTML in titles
+    const empty = document.getElementById("no-sources");
+    if (empty) empty.remove();
+    list.appendChild(item);
+    wireDelete(item);
+    wireGenerate(item);
+  }
+
+  // Add a source from a news/article URL.
+  const urlBtn = document.getElementById("source-url-btn");
+  if (urlBtn) {
+    const urlInput = document.getElementById("source-url");
+    const urlStatus = document.getElementById("source-url-status");
+    urlBtn.addEventListener("click", async function () {
+      const url = (urlInput.value || "").trim();
+      if (!url) { urlStatus.textContent = "Paste a link first."; return; }
+      urlBtn.disabled = true;
+      urlStatus.textContent = "Fetching article…";
+      try {
+        const res = await fetch("/api/sources/url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not add URL.");
+        addSourceItem(data.source);
+        urlInput.value = "";
+        urlStatus.textContent = "Added: " + data.source.name;
+      } catch (err) {
+        urlStatus.textContent = err.message;
+      } finally {
+        urlBtn.disabled = false;
+      }
+    });
+  }
+
+  // Add a source from a live news search on a topic.
+  const newsBtn = document.getElementById("source-news-btn");
+  if (newsBtn) {
+    const newsInput = document.getElementById("source-news");
+    const newsStatus = document.getElementById("source-news-status");
+    newsBtn.addEventListener("click", async function () {
+      const query = (newsInput.value || "").trim();
+      if (!query) { newsStatus.textContent = "Enter a topic first."; return; }
+      newsBtn.disabled = true;
+      newsStatus.textContent = "Searching recent news…";
+      try {
+        const res = await fetch("/api/sources/news", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "News search failed.");
+        addSourceItem(data.source);
+        newsInput.value = "";
+        newsStatus.textContent = "Added: " + data.source.name;
+      } catch (err) {
+        newsStatus.textContent = err.message;
+      } finally {
+        newsBtn.disabled = false;
+      }
+    });
+  }
+
   if (uploadBtn) {
     uploadBtn.addEventListener("click", async function () {
       const file = input.files && input.files[0];
@@ -324,19 +392,7 @@ function wireLengthToggle(selectId, customId) {
         const res = await fetch("/api/sources", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Upload failed.");
-        const item = document.createElement("li");
-        item.className = "source-item";
-        item.dataset.sourceId = data.source.id;
-        item.innerHTML =
-          '<strong>' + data.source.name + '</strong> <span class="muted">· ' + data.source.charCount + ' chars</span>' +
-          '<span class="row-actions">' +
-          '<button type="button" class="btn small generate-from" data-source-id="' + data.source.id + '">Generate drafts</button> ' +
-          '<button type="button" class="btn small ghost delete-source" data-source-id="' + data.source.id + '">Delete</button>' +
-          '</span>';
-        const empty = document.getElementById("no-sources");
-        if (empty) empty.remove();
-        list.appendChild(item);
-        wireDelete(item); wireGenerate(item);
+        addSourceItem(data.source);
         input.value = "";
         sourceStatus.textContent = "Parsed " + data.source.charCount + " characters.";
       } catch (err) {
@@ -369,6 +425,7 @@ function wireLengthToggle(selectId, customId) {
             audience: (genAudience.value || "").trim(),
             language: (document.getElementById("gen-language") || {}).value || "en",
             length: pickLength("gen-length", "gen-length-custom"),
+            stance: (document.getElementById("gen-stance") || {}).value || "",
           }),
         });
         const data = await res.json();

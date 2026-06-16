@@ -241,6 +241,21 @@ export const TONE_PRESETS = {
   },
 };
 
+// Editorial stance for commentary on a source (e.g. news). Free text passes through.
+export const STANCES = {
+  take: { label: "Sharp take", instruction: "Share a clear, opinionated point of view. Take a side and own it." },
+  supportive: { label: "Supportive", instruction: "Argue in favor: why this matters and is a positive development." },
+  contrarian: { label: "Contrarian", instruction: "Challenge the prevailing narrative with a well-reasoned contrarian angle." },
+  implications: { label: "What it means", instruction: "Focus on the practical implications for the audience and their industry." },
+  mythbust: { label: "Myth-bust", instruction: "Correct a common misconception this surfaces." },
+  predict: { label: "Prediction", instruction: "Make a concrete prediction about what happens next, grounded in the facts." },
+};
+
+export function resolveStance(stance) {
+  if (!stance) return "";
+  return STANCES[stance]?.instruction || String(stance).slice(0, 300);
+}
+
 export function resolveTone(tone) {
   if (!tone) return TONE_PRESETS.professional.instruction;
   const preset = TONE_PRESETS[tone];
@@ -387,7 +402,7 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
-export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars, loraModel } = {}) {
+export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance } = {}) {
   let provider = sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
@@ -414,6 +429,9 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Use short paragraphs and line breaks for mobile readability.",
     "- Ground every claim, number, name, and fact strictly in the SOURCE MATERIAL. Never invent statistics, quotes, or details that are not in the source.",
     "- Carry one clear idea and end with a takeaway or a natural question.",
+    resolveStance(stance)
+      ? `- ANGLE: ${resolveStance(stance)} This is the author's commentary/opinion on the material, not a neutral summary — but every fact must still come from the source.`
+      : "",
     ...ANTI_AI_RULES,
     "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,

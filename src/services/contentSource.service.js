@@ -1,6 +1,7 @@
 import { gzipSync, gunzipSync } from "node:zlib";
 import { prisma } from "../lib/prisma.js";
 import { extractText } from "./pdf.service.js";
+import { fetchArticle, buildNewsContext } from "./webContext.service.js";
 
 const MAX_PDF_SIZE = 15 * 1024 * 1024; // 15 MB
 const GZ_PREFIX = "gz1:"; // marks a gzip+base64 encoded value
@@ -47,6 +48,34 @@ export async function createFromPdf(userId, file, name) {
       filename: file.originalname || null,
       extractedText: compressText(text),
       charCount,
+    },
+  });
+}
+
+// Create a source from a news/article URL (fetched + extracted live).
+export async function createFromUrl(userId, url) {
+  const { title, text } = await fetchArticle(url);
+  return prisma.contentSource.create({
+    data: {
+      userId,
+      name: (title || url).slice(0, 120),
+      filename: url,
+      extractedText: compressText(`${title}\n${url}\n\n${text}`),
+      charCount: text.length,
+    },
+  });
+}
+
+// Create a source from a live news search (Brave) on a topic.
+export async function createFromNews(userId, query) {
+  const { name, text } = await buildNewsContext(query);
+  return prisma.contentSource.create({
+    data: {
+      userId,
+      name: name.slice(0, 120),
+      filename: null,
+      extractedText: compressText(text),
+      charCount: text.length,
     },
   });
 }

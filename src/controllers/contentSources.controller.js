@@ -1,7 +1,9 @@
 import { prisma } from "../lib/prisma.js";
-import { createFromPdf, listSources, getSource, deleteSource, decompressText } from "../services/contentSource.service.js";
-import { generatePostsFromSource, parseExemplars } from "../services/ai.service.js";
+import { createFromPdf, createFromUrl, createFromNews, listSources, getSource, deleteSource, decompressText } from "../services/contentSource.service.js";
+import { newsSearchEnabled } from "../services/webContext.service.js";
+import { generatePostsFromSource, parseExemplars, STANCES } from "../services/ai.service.js";
 import { getActiveRoutine } from "../services/routine.service.js";
+import { createWatch, listWatches, deleteWatch } from "../services/newsWatch.service.js";
 import { normalizePostLanguage } from "../utils/postLanguages.js";
 
 // Page: list sources + upload + generate forms.
@@ -15,11 +17,15 @@ export async function renderSources(req, res, next) {
       where: { userId: req.user.id },
       orderBy: { createdAt: "desc" },
     });
+    const watches = await listWatches(req.user.id);
     res.render("sources", {
       title: "Content sources",
       sources,
       savedTones,
       routine,
+      watches,
+      stances: STANCES,
+      newsEnabled: newsSearchEnabled(),
       linkedinReady: Boolean(req.user.linkedinAccount?.linkedinPersonUrn),
     });
   } catch (err) {
@@ -35,6 +41,61 @@ export async function uploadSource(req, res) {
     res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount } });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+}
+
+// POST /api/sources/url — add a source from a news/article URL (fetched live).
+export async function addUrl(req, res) {
+  try {
+    const url = (req.body?.url || "").trim();
+    if (!url) return res.status(400).json({ error: "A URL is required." });
+    const source = await createFromUrl(req.user.id, url);
+    res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+// POST /api/sources/news — add a source from a live news search on a topic.
+export async function addNews(req, res) {
+  try {
+    const query = (req.body?.query || "").trim();
+    if (!query) return res.status(400).json({ error: "A topic is required." });
+    const source = await createFromNews(req.user.id, query);
+    res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+// POST /api/sources/watches — create a standing news watch (Tier C).
+export async function addWatch(req, res, next) {
+  try {
+    const query = (req.body?.query || "").trim();
+    if (!query) {
+      if (req.baseUrl.startsWith("/api")) return res.status(400).json({ error: "A topic is required." });
+      return res.redirect("/sources");
+    }
+    await createWatch(req.user.id, {
+      query,
+      tonePresetId: req.body?.tonePresetId || null,
+      stance: req.body?.stance || null,
+      language: normalizePostLanguage(req.body?.language),
+    });
+    if (req.baseUrl.startsWith("/api")) return res.status(201).json({ ok: true });
+    res.redirect("/sources");
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function removeWatch(req, res, next) {
+  try {
+    await deleteWatch(req.params.id, req.user.id);
+    if (req.baseUrl.startsWith("/api")) return res.json({ ok: true });
+    res.redirect("/sources");
+  } catch (err) {
+    next(err);
   }
 }
 
@@ -86,6 +147,7 @@ export async function generateFromSource(req, res) {
       length: req.body?.length,
       exemplars,
       loraModel,
+      stance: req.body?.stance,
     });
 
     // Default timezone from the user's active routine, else UTC.

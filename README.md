@@ -94,6 +94,23 @@ the browser.
 | POST | `/api/posts/:id/retry` | Retry failed |
 | POST | `/internal/publish-due-posts` | Cron trigger (needs `x-internal-cron-secret`) |
 
+## Commentary on current events (news)
+
+Post an informed take on something happening now. A content source can be:
+- a **PDF** (upload),
+- a **URL** — pasted on the Sources page; the article is fetched and its text
+  extracted live,
+- a **news topic** — searched via GDELT (with a Google News RSS fallback); free,
+  no API key. The top recent articles are fetched and assembled into context.
+
+Generation is grounded strictly in that context (no fabricated facts) and writes
+*your take* in the chosen voice with a **stance** (sharp take, supportive,
+contrarian, what-it-means, myth-bust, prediction). **News watches** (Tier C)
+monitor a topic and auto-draft a take on fresh articles into the approval queue
+(checked hourly, throttled to a couple per day per watch). News search is
+best-effort/keyless — for a guaranteed feed, slot in a keyed provider in
+`webContext.service.js`.
+
 ## On-prem LLM (sovereign AI)
 
 PDF-based draft generation can run against an internal **DGX Spark / vLLM**

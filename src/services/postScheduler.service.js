@@ -3,6 +3,7 @@ import { getValidAccessToken } from "./token.service.js";
 import { publishLinkedInTextPost, uploadImageToLinkedIn } from "./linkedin.service.js";
 import { getPostImageFilesWithData } from "./upload.service.js";
 import { pruneOldSources } from "./contentSource.service.js";
+import { runNewsWatches } from "./newsWatch.service.js";
 
 const BATCH_SIZE = 25;
 // A post stuck in PUBLISHING longer than this is considered abandoned (worker
@@ -109,6 +110,8 @@ export async function runPublishDuePosts() {
   const reclaimed = await reclaimStalePublishing();
   // Housekeeping: drop content sources past the retention window.
   await pruneOldSources().catch(() => {});
+  // News watches: auto-draft takes on fresh articles into the approval queue.
+  await runNewsWatches().catch(() => {});
 
   const posts = await prisma.scheduledPost.findMany({
     where: { status: "SCHEDULED", scheduledAt: { lte: new Date() } },

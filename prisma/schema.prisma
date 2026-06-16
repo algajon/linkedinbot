@@ -20,6 +20,26 @@ model User {
   tonePresets     TonePreset[]
   contentSources  ContentSource[]
   postingRoutines PostingRoutine[]
+  newsWatches     NewsWatch[]
+}
+
+// A standing topic to monitor; the hourly job drafts a take on fresh articles.
+model NewsWatch {
+  id           String    @id @default(uuid())
+  userId       String
+  query        String
+  tonePresetId String?
+  stance       String?
+  language     String    @default("en")
+  active       Boolean   @default(true)
+  seenUrls     Json?
+  lastRunAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // A reusable, AI-distilled tone of voice learned from example posts.

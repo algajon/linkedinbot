@@ -14,6 +14,20 @@
     <button type="button" id="source-upload-btn" class="btn"><%= t("sources.uploadbtn") %></button>
     <span id="source-status" class="muted" role="status" aria-live="polite"></span>
   </div>
+
+  <h3 style="margin-top:1.25rem"><%= t("sources.fromurl") %></h3>
+  <div class="upload-row">
+    <input type="url" id="source-url" placeholder="<%= t("sources.urlph") %>" />
+    <button type="button" id="source-url-btn" class="btn"><%= t("sources.add") %></button>
+    <span id="source-url-status" class="muted" role="status" aria-live="polite"></span>
+  </div>
+
+  <h3 style="margin-top:1.25rem"><%= t("sources.fromnews") %></h3>
+  <div class="upload-row">
+    <input type="text" id="source-news" placeholder="<%= t("sources.newsph") %>" />
+    <button type="button" id="source-news-btn" class="btn"><%= t("sources.search") %></button>
+    <span id="source-news-status" class="muted" role="status" aria-live="polite"></span>
+  </div>
 </section>
 
 <section class="card">
@@ -73,6 +87,15 @@
         <input id="gen-length-custom" type="number" min="120" max="1300" placeholder="<%= t("length.customph") %>" hidden />
       </label>
       <label>
+        <%= t("sources.stance") %>
+        <select id="gen-stance">
+          <option value=""><%= t("ai.audience.optional") %></option>
+          <% Object.entries(stances).forEach(([key, s]) => { %>
+            <option value="<%= key %>"><%= s.label %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>
         <%= t("sources.count") %>
         <input type="number" id="gen-count" min="1" max="7" value="3" />
       </label>
@@ -86,6 +109,54 @@
       <span id="gen-status" class="muted" role="status" aria-live="polite"></span>
     </div>
   </div>
+</section>
+
+<section class="card">
+  <h3><%= t("watch.title") %> <span class="muted">(<%= t("watch.every") %>)</span></h3>
+  <p class="muted"><%= t("watch.intro") %></p>
+  <form action="/sources/watches" method="post" class="ai-controls" style="align-items:flex-end">
+    <label style="flex:2 1 240px">
+      <%= t("sources.fromnews") %>
+      <input type="text" name="query" placeholder="<%= t("sources.newsph") %>" required />
+    </label>
+    <label>
+      <%= t("ai.tone") %>
+      <select name="tonePresetId">
+        <option value="">—</option>
+        <% (savedTones || []).forEach((p) => { %><option value="<%= p.id %>"><%= p.name %></option><% }) %>
+      </select>
+    </label>
+    <label>
+      <%= t("sources.stance") %>
+      <select name="stance">
+        <option value="">—</option>
+        <% Object.entries(stances).forEach(([key, s]) => { %><option value="<%= key %>"><%= s.label %></option><% }) %>
+      </select>
+    </label>
+    <label>
+      <%= t("post.language") %>
+      <select name="language">
+        <% postLanguages.forEach((l) => { %><option value="<%= l.code %>"><%= l.label %></option><% }) %>
+      </select>
+    </label>
+    <button type="submit" class="btn primary"><%= t("watch.add") %></button>
+  </form>
+
+  <% if (!watches || !watches.length) { %>
+    <p class="empty"><%= t("watch.none") %></p>
+  <% } else { %>
+    <ul class="post-mini-list">
+      <% watches.forEach((w) => { %>
+        <li>
+          <strong><%= w.query %></strong>
+          <span class="muted"><% if (w.stance) { %><%= w.stance %> · <% } %><%= w.language %></span>
+          <form action="/sources/watches/<%= w.id %>/delete" method="post" class="inline" style="margin-left:auto" onsubmit="return confirm('Delete this watch?');">
+            <button type="submit" class="btn small ghost"><%= t("common.delete") %></button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
 </section>
 
 <%- include("partials/footer") %>
