@@ -312,6 +312,34 @@ function wireLengthToggle(selectId, customId) {
 
   if (list) list.querySelectorAll(".source-item").forEach((el) => { wireDelete(el); wireGenerate(el); });
 
+  function hostOf(u) {
+    try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; }
+  }
+
+  // Render the clickable "Sources (verify)" links for a news/URL source. Built
+  // via DOM nodes (not innerHTML) so article titles can't inject markup.
+  function renderRefs(item, urls) {
+    if (!Array.isArray(urls) || !urls.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "source-refs";
+    const label = document.createElement("span");
+    label.className = "muted";
+    label.textContent = "Sources (verify):";
+    wrap.appendChild(label);
+    const ul = document.createElement("ul");
+    urls.forEach(function (r) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = r.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = r.title || r.url; a.title = r.title || r.url;
+      const host = document.createElement("span");
+      host.className = "muted"; host.textContent = " (" + hostOf(r.url) + ")";
+      li.appendChild(a); li.appendChild(host); ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    item.appendChild(wrap);
+  }
+
   function addSourceItem(source) {
     const item = document.createElement("li");
     item.className = "source-item";
@@ -323,6 +351,7 @@ function wireLengthToggle(selectId, customId) {
       '<button type="button" class="btn small ghost delete-source" data-source-id="' + source.id + '">Delete</button>' +
       "</span>";
     item.querySelector("strong").textContent = source.name; // safe against HTML in titles
+    renderRefs(item, source.sourceUrls); // show article links immediately, no refresh
     const empty = document.getElementById("no-sources");
     if (empty) empty.remove();
     list.appendChild(item);
@@ -356,9 +385,52 @@ function wireLengthToggle(selectId, customId) {
   }
 
   // Add a source from a live news search on a topic.
+  // Recent searched topics — clickable chips at the bottom of the page.
+  const recentBox = document.getElementById("recent-topics");
+  const noTopics = document.getElementById("no-topics");
+  const newsInput = document.getElementById("source-news");
   const newsBtn = document.getElementById("source-news-btn");
+
+  function wireTopicChip(chip) {
+    const searchBtn = chip.querySelector(".topic-search");
+    const removeBtn = chip.querySelector(".topic-remove");
+    if (searchBtn) searchBtn.addEventListener("click", function () {
+      if (newsInput) newsInput.value = searchBtn.dataset.query || "";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (newsBtn) newsBtn.click();
+    });
+    if (removeBtn) removeBtn.addEventListener("click", async function () {
+      removeBtn.disabled = true;
+      try {
+        const res = await fetch("/api/sources/topics/" + chip.dataset.topicId, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+        chip.remove();
+        if (recentBox && !recentBox.querySelector(".topic-chip") && noTopics) noTopics.hidden = false;
+      } catch (e) { removeBtn.disabled = false; }
+    });
+  }
+
+  function addRecentTopic(topic) {
+    if (!topic || !recentBox) return;
+    const dup = Array.prototype.slice.call(recentBox.querySelectorAll(".topic-search"))
+      .find(function (b) { return b.dataset.query === topic.query; });
+    if (dup) { recentBox.prepend(dup.closest(".topic-chip")); return; } // bump to front
+    const chip = document.createElement("span");
+    chip.className = "topic-chip";
+    chip.dataset.topicId = topic.id;
+    const sb = document.createElement("button");
+    sb.type = "button"; sb.className = "topic-search"; sb.dataset.query = topic.query; sb.textContent = topic.query;
+    const rb = document.createElement("button");
+    rb.type = "button"; rb.className = "topic-remove"; rb.title = "Delete"; rb.setAttribute("aria-label", "Delete"); rb.textContent = "×";
+    chip.appendChild(sb); chip.appendChild(rb);
+    recentBox.prepend(chip);
+    wireTopicChip(chip);
+    if (noTopics) noTopics.hidden = true;
+  }
+
+  if (recentBox) recentBox.querySelectorAll(".topic-chip").forEach(wireTopicChip);
+
   if (newsBtn) {
-    const newsInput = document.getElementById("source-news");
     const newsStatus = document.getElementById("source-news-status");
     newsBtn.addEventListener("click", async function () {
       const query = (newsInput.value || "").trim();
@@ -370,6 +442,7 @@ function wireLengthToggle(selectId, customId) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "News search failed.");
         addSourceItem(data.source);
+        addRecentTopic(data.topic);
         newsInput.value = "";
         newsStatus.textContent = "Added: " + data.source.name;
       } catch (err) {

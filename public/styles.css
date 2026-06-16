@@ -338,6 +338,12 @@ label.radio input { width: auto; margin: 0 0.5rem 0 0; }
 .source-refs ul { margin: 0.15rem 0 0; padding-left: 1.1rem; }
 .source-refs li { margin: 0.1rem 0; }
 .source-refs a { word-break: break-word; }
+.topic-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.topic-chip { display: inline-flex; align-items: center; border: 1px solid #cfe0f5; background: #f1f7ff; border-radius: 999px; overflow: hidden; }
+.topic-chip .topic-search { border: 0; background: transparent; color: var(--brand); font: inherit; padding: 0.3rem 0.5rem 0.3rem 0.8rem; cursor: pointer; }
+.topic-chip .topic-search:hover { text-decoration: underline; }
+.topic-chip .topic-remove { border: 0; background: transparent; color: #8aa; font-size: 1rem; line-height: 1; padding: 0.3rem 0.6rem 0.3rem 0.2rem; cursor: pointer; }
+.topic-chip .topic-remove:hover { color: #c0392b; }
 .queue-item { border-left: 3px solid var(--brand); }
 .queue-item textarea { min-height: 7rem; }
 #gen-count { max-width: 90px; }

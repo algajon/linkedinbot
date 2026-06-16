@@ -170,4 +170,18 @@
   <% } %>
 </section>
 
+<section class="card">
+  <h3><%= t("sources.recenttitle") %></h3>
+  <p class="muted"><%= t("sources.recentintro") %></p>
+  <div id="recent-topics" class="topic-chips">
+    <% (recentTopics || []).forEach((tp) => { %>
+      <span class="topic-chip" data-topic-id="<%= tp.id %>">
+        <button type="button" class="topic-search" data-query="<%= tp.query %>"><%= tp.query %></button>
+        <button type="button" class="topic-remove" title="<%= t('common.delete') %>" aria-label="<%= t('common.delete') %>">×</button>
+      </span>
+    <% }) %>
+  </div>
+  <p class="empty" id="no-topics" <%= (recentTopics && recentTopics.length) ? "hidden" : "" %>><%= t("sources.recentnone") %></p>
+</section>
+
 <%- include("partials/footer") %>

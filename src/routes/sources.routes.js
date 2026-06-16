@@ -28,5 +28,6 @@ sourcesApiRouter.use(requireAuth);
 sourcesApiRouter.post("/", pdfUpload.single("file"), sources.uploadSource);
 sourcesApiRouter.post("/url", generateLimiter, sources.addUrl);
 sourcesApiRouter.post("/news", generateLimiter, sources.addNews);
+sourcesApiRouter.delete("/topics/:id", sources.removeTopic);
 sourcesApiRouter.delete("/:id", sources.removeSource);
 sourcesApiRouter.post("/:id/generate", generateLimiter, sources.generateFromSource);

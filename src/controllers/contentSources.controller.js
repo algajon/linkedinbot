@@ -4,6 +4,7 @@ import { newsSearchEnabled } from "../services/webContext.service.js";
 import { generatePostsFromSource, parseExemplars, STANCES } from "../services/ai.service.js";
 import { getActiveRoutine } from "../services/routine.service.js";
 import { createWatch, listWatches, deleteWatch } from "../services/newsWatch.service.js";
+import { recordTopic, listRecentTopics, deleteTopic } from "../services/recentTopic.service.js";
 import { normalizePostLanguage } from "../utils/postLanguages.js";
 
 // Page: list sources + upload + generate forms.
@@ -18,12 +19,14 @@ export async function renderSources(req, res, next) {
       orderBy: { createdAt: "desc" },
     });
     const watches = await listWatches(req.user.id);
+    const recentTopics = await listRecentTopics(req.user.id);
     res.render("sources", {
       title: "Content sources",
       sources,
       savedTones,
       routine,
       watches,
+      recentTopics,
       stances: STANCES,
       newsEnabled: newsSearchEnabled(),
       linkedinReady: Boolean(req.user.linkedinAccount?.linkedinPersonUrn),
@@ -50,7 +53,7 @@ export async function addUrl(req, res) {
     const url = (req.body?.url || "").trim();
     if (!url) return res.status(400).json({ error: "A URL is required." });
     const source = await createFromUrl(req.user.id, url);
-    res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount } });
+    res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount, sourceUrls: source.sourceUrls || [] } });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -62,7 +65,11 @@ export async function addNews(req, res) {
     const query = (req.body?.query || "").trim();
     if (!query) return res.status(400).json({ error: "A topic is required." });
     const source = await createFromNews(req.user.id, query);
-    res.status(201).json({ source: { id: source.id, name: source.name, charCount: source.charCount } });
+    const topic = await recordTopic(req.user.id, query);
+    res.status(201).json({
+      source: { id: source.id, name: source.name, charCount: source.charCount, sourceUrls: source.sourceUrls || [] },
+      topic: topic ? { id: topic.id, query: topic.query } : null,
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -96,6 +103,15 @@ export async function removeWatch(req, res, next) {
     res.redirect("/sources");
   } catch (err) {
     next(err);
+  }
+}
+
+export async function removeTopic(req, res) {
+  try {
+    await deleteTopic(req.params.id, req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 }
 
