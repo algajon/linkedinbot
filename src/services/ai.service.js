@@ -142,6 +142,37 @@ const BANNED_HASHTAGS = new Set(
   ].map((s) => s.toLowerCase())
 );
 
+// Allowlist of real, established LinkedIn hashtags (active communities). Generated
+// tags must come from this set, so we never fabricate one from a headline (e.g.
+// #B52Bomber, #EdwardsAFB). It's a curated, refreshable list — not "live
+// trending" (LinkedIn has no open API for that), but every tag here is real and
+// actually used. Matched case-insensitively. Keep specific enough to not read as
+// filler, broad enough to cover common professional topics.
+const REAL_HASHTAGS = [
+  // Tech & AI
+  "ArtificialIntelligence", "MachineLearning", "GenerativeAI", "DataScience", "BigData",
+  "CloudComputing", "Cybersecurity", "SoftwareEngineering", "DevOps", "WebDevelopment",
+  "SaaS", "Programming", "OpenSource", "TechNews", "Automation", "InternetOfThings",
+  // Retail / signage / hospitality (the user's space)
+  "RetailTech", "Retail", "DigitalSignage", "CustomerExperience", "Ecommerce",
+  "Hospitality", "FoodAndBeverage", "RetailDesign", "Omnichannel", "EInk",
+  // Business & strategy
+  "Entrepreneur", "Startups", "SmallBusiness", "VentureCapital", "BusinessStrategy",
+  "ProductManagement", "ProjectManagement", "Consulting", "B2B", "B2BMarketing",
+  // Marketing & sales
+  "DigitalMarketing", "ContentMarketing", "SocialMediaMarketing", "SEO", "Branding",
+  "MarketingStrategy", "Sales", "CustomerSuccess", "PublicRelations",
+  // Design & product
+  "UXDesign", "UIDesign", "ProductDesign", "DesignThinking",
+  // People & ops
+  "HumanResources", "TalentAcquisition", "Recruiting", "RemoteWork", "Productivity",
+  "SupplyChain", "Logistics", "Manufacturing",
+  // Finance & industry
+  "Fintech", "Finance", "Investing", "RealEstate", "Healthcare", "HealthTech",
+  "EdTech", "Sustainability", "CleanEnergy", "ClimateTech", "ESG", "RenewableEnergy",
+];
+const REAL_HASHTAG_LOOKUP = new Map(REAL_HASHTAGS.map((t) => [t.toLowerCase(), t]));
+
 // Post-processor: hard-strip the AI tells the model may still produce.
 export function deAiify(text) {
   let t = String(text);
@@ -183,16 +214,17 @@ function tidyClippedTail(text) {
 // (the body is public-bound content); falls back to the body's provider. The
 // returned tags are appended AFTER generation, so they don't count toward the
 // post's length budget. Returns a space-separated string (or "" on failure).
-export async function generateHashtags({ text, provider, language, count = 4 } = {}) {
+export async function generateHashtags({ text, provider, language, count = 3, sensitive = false } = {}) {
   const tagProvider = provider || openaiProvider();
+  if (sensitive) return ""; // never tag a tragedy / somber post
   if (!tagProvider || !String(text || "").trim()) return "";
   const sys = [
-    "You are a LinkedIn hashtag specialist.",
-    `Pick ${count} specific, niche hashtags a real practitioner in this field would actually use for the post below.`,
-    "Favor concrete product, industry, event, or topic tags. Mix in a couple the author themselves would use.",
-    "BANNED — never output generic filler tags like #Innovation #Success #Growth #Motivation #Inspiration #ThoughtLeadership #DigitalTransformation #GameChanger #Leadership #Mindset #Hustle. They scream 'AI-written'.",
-    "Respond with ONLY the hashtags on a single line, space-separated, each in #CamelCase, no duplicates, no other text.",
-    language ? `Prefer hashtags suited to ${languageName(language)} where natural; keep standard English tags when widely used.` : "",
+    "You attach hashtags to a LinkedIn post, but ONLY when they genuinely fit. Reason about THIS post's topic first.",
+    "Return NONE (empty list) for posts about a death, tragedy, accident, crash, disaster, violence, illness, layoffs, or any somber or serious news event. Hashtags there read as engagement farming and are disrespectful.",
+    "You may ONLY use hashtags from the ALLOWED list below. Never invent a hashtag, and NEVER build one from a name, place, company, product, event, model number, or acronym in the post (for example never #B52Bomber or #EdwardsAFB). Those are fabricated, not real.",
+    `ALLOWED HASHTAGS: ${REAL_HASHTAGS.map((t) => "#" + t).join(" ")}`,
+    `Choose at most ${count} that a real practitioner would actually attach to this post. Fewer is better. If fewer than two genuinely fit, return none.`,
+    'Respond with ONLY JSON: {"appropriate": <true|false>, "hashtags": ["#Tag", ...]}.',
   ]
     .filter(Boolean)
     .join("\n");
@@ -202,19 +234,25 @@ export async function generateHashtags({ text, provider, language, count = 4 } =
         { role: "system", content: sys },
         { role: "user", content: String(text).slice(0, 4000) },
       ],
-      temperature: 0.4,
-      maxTokens: 60,
+      temperature: 0.2,
+      maxTokens: 100,
+      jsonMode: true,
     });
-    const found = content.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/#[\p{L}\d_]+/gu) || [];
+    const clean = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    let parsed = {};
+    try { parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)?.[0] || "{}"); } catch { /* fall back to scan */ }
+    if (parsed.appropriate === false) return ""; // model judged hashtags inappropriate here
+    const candidates = Array.isArray(parsed.hashtags) ? parsed.hashtags : (clean.match(/#[\p{L}\d_]+/gu) || []);
     const seen = new Set();
-    const uniq = [];
-    for (const tag of found) {
-      const k = tag.toLowerCase();
-      if (seen.has(k) || BANNED_HASHTAGS.has(k.replace(/^#/, ""))) continue; // drop dupes + generic filler
-      seen.add(k);
-      uniq.push(tag);
+    const out = [];
+    for (const raw of candidates) {
+      const core = String(raw).replace(/^#/, "").toLowerCase();
+      const real = REAL_HASHTAG_LOOKUP.get(core); // allowlist => guaranteed real, never fabricated
+      if (!real || seen.has(core)) continue;
+      seen.add(core);
+      out.push("#" + real);
     }
-    return uniq.slice(0, count).join(" ");
+    return out.slice(0, count).join(" ");
   } catch {
     return "";
   }
@@ -570,7 +608,7 @@ export async function generatePostsFromSource({
     }
     body = body.slice(0, MAX_POST_LENGTH);
     priorHooks.push(body.split("\n")[0].slice(0, 60));
-    const tags = await generateHashtags({ text: body, provider, language });
+    const tags = await generateHashtags({ text: body, provider, language, sensitive });
     out.push(appendHashtags(body, tags));
   }
   if (!out.length) throw new Error(`${provider.name} returned no usable posts.`);
