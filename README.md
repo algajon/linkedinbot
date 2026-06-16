@@ -116,6 +116,13 @@ posts (stored in `sampleText`, `===POST===` delimited) are injected into the
 prompt. Strong anti-"AI tell" rules + a post-processor (`deAiify`) strip em
 dashes, markdown, bullet/numbered lists, emoji spam, and generic filler hashtags.
 
+**Quality engine** (`CONTENT_QUALITY=on`, default): every post is vetted, not
+one-shot. Topic posts generate several varied drafts, an LLM judge picks the
+strongest (hook + authenticity weighted), then a self-refine pass lifts it
+against a quality rubric (hook, one idea, specificity, value, readability,
+authenticity, engagement). Source posts are grounded strictly in the document
+and each is refined the same way. Set `CONTENT_QUALITY=off` for cheaper one-shot.
+
 For maximum fidelity you can **fine-tune per author** (optional, scripts only —
 nothing runs or spends automatically):
 

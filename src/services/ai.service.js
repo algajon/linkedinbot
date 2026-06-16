@@ -272,6 +272,83 @@ function buildSystemPrompt(toneInstruction, audience, languageName, targetChars,
     .join("\n");
 }
 
+// Quality engine: rubric-driven best-of-N + self-refine. On by default; set
+// CONTENT_QUALITY=off to fall back to single-shot (faster/cheaper).
+const QUALITY = (process.env.CONTENT_QUALITY || "on").trim().toLowerCase() !== "off";
+
+const QUALITY_RUBRIC = [
+  "Judge a LinkedIn post on each dimension (1-10):",
+  "1. HOOK - the first line stops the scroll (curiosity, tension, a number, or a contrarian take).",
+  "2. ONE IDEA - a single clear point, not several half-ideas.",
+  "3. SPECIFIC - a concrete detail, example, or number; no vague filler.",
+  "4. VALUE - the reader learns or feels something worthwhile.",
+  "5. READABLE - short lines, white space, a clean arc (hook -> insight -> payoff).",
+  "6. AUTHENTIC - sounds like a real person; zero AI tells (no em dashes, markdown, bullet/numbered lists, cliches).",
+  "7. ENGAGEMENT - ends on a natural question or invitation, never forced.",
+].join("\n");
+
+// One draft from a provider, with clip-repair + AI-tell scrubbing applied.
+async function draftPost(provider, { system, user, targetChars, temperature = 0.85 }) {
+  const { content, finishReason } = await chatCompletion(provider, {
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    temperature,
+    maxTokens: Math.ceil(targetChars / 4) + 24,
+  });
+  let text = content;
+  if (finishReason === "length") text = tidyClippedTail(text);
+  return deAiify(text).slice(0, MAX_POST_LENGTH);
+}
+
+// LLM-as-judge: pick the strongest draft (hook + authenticity weighted).
+async function judgeBest(provider, drafts) {
+  if (drafts.length <= 1) return drafts[0] || "";
+  const sys = [
+    "You are a ruthless LinkedIn editor.",
+    QUALITY_RUBRIC,
+    "Weight HOOK and AUTHENTIC most heavily. A boring or AI-sounding opener disqualifies a post.",
+    'Return ONLY JSON: {"best": <0-based index of the single strongest post>}.',
+  ].join("\n");
+  const list = drafts.map((d, i) => `### Post ${i}\n${d}`).join("\n\n");
+  try {
+    const { content } = await chatCompletion(provider, {
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: list },
+      ],
+      temperature: 0.2,
+      maxTokens: 30,
+    });
+    const m = content.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/\d+/);
+    const idx = m ? parseInt(m[0], 10) : 0;
+    return drafts[idx] || drafts[0];
+  } catch {
+    return drafts[0];
+  }
+}
+
+// Critique-and-rewrite pass: lift a draft against the rubric, keeping the voice.
+async function refineDraft(provider, { draft, voiceSystem, targetChars, grounded = false } = {}) {
+  const sys = [
+    voiceSystem,
+    "Now REVISE the draft below so it scores high on every point of this rubric, while keeping the author's voice and topic:",
+    QUALITY_RUBRIC,
+    `Tighten to about ${targetChars} characters. Strengthen the first-line hook, cut every filler word, keep a clean human arc and a natural closing line.`,
+    grounded
+      ? "Do NOT introduce any fact, name, number, or claim that is not already in the draft."
+      : "Add one concrete specific if it makes the post land harder.",
+    "Output ONLY the improved post — no preamble, no hashtags, no markdown, no em dashes, no bullet or numbered lists.",
+  ].join("\n");
+  try {
+    const out = await draftPost(provider, { system: sys, user: draft, targetChars, temperature: 0.6 });
+    return out && out.length > 40 ? out : draft;
+  } catch {
+    return draft;
+  }
+}
+
 // Generate a LinkedIn post. `topic` is what the post should be about.
 export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -283,47 +360,29 @@ export async function generatePost({ topic, tone, audience, language, length, ex
   }
 
   // A per-author fine-tuned model id (modelOverride) takes precedence.
-  const model = modelOverride || process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const systemPrompt = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length), exemplars);
+  const base = openaiProvider();
+  const provider = modelOverride ? { ...base, model: modelOverride } : base;
+  const target = lengthTarget(length);
+  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  const user = `Write a LinkedIn post about: ${String(topic).trim()}`;
 
-  const res = await fetch(COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Write a LinkedIn post about: ${String(topic).trim()}` },
-      ],
-      temperature: 0.8,
-      // Cap tokens to the target length so "short" really is short (~4 chars/token).
-      max_tokens: Math.ceil(lengthTarget(length) / 4) + 10,
-    }),
-  });
+  // Best-of-N: varied temperatures give different hooks/angles to choose from.
+  const temps = QUALITY ? [0.9, 0.75, 1.05] : [0.85];
+  const drafts = (
+    await Promise.all(
+      temps.map((t) => draftPost(provider, { system: voiceSystem, user, targetChars: target, temperature: t }).catch(() => null))
+    )
+  ).filter((d) => d && d.length > 40);
+  if (!drafts.length) throw new Error("OpenAI returned an empty response.");
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    // Do not surface the API key; only the provider's error message.
-    throw new Error(`OpenAI request failed: ${res.status} ${errBody.slice(0, 500)}`);
-  }
+  // Judge-pick the strongest, then a self-refine pass to lift it further.
+  let best = QUALITY ? await judgeBest(provider, drafts) : drafts[0];
+  if (QUALITY) best = await refineDraft(provider, { draft: best, voiceSystem, targetChars: target });
+  best = best.slice(0, MAX_POST_LENGTH);
 
-  const data = await res.json();
-  let text = data.choices?.[0]?.message?.content?.trim();
-  if (!text) {
-    throw new Error("OpenAI returned an empty response.");
-  }
-  // If the token cap clipped it mid-sentence, trim back to a clean ending.
-  if (data.choices?.[0]?.finish_reason === "length") {
-    text = tidyClippedTail(text);
-  }
-  // Strip AI tells, then hard cap on the body.
-  text = deAiify(text).slice(0, MAX_POST_LENGTH);
   // Hashtags via a separate request — always added, not counted in the length.
-  const tags = await generateHashtags({ text, provider: openaiProvider(), language });
-  return appendHashtags(text, tags);
+  const tags = await generateHashtags({ text: best, provider: openaiProvider(), language });
+  return appendHashtags(best, tags);
 }
 
 // Generate several distinct LinkedIn post drafts grounded in source material
@@ -353,6 +412,8 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
     "- Be ready to publish: no preamble, no quotation marks, no markdown headings.",
     "- Open with a strong scroll-stopping hook in the first line.",
     "- Use short paragraphs and line breaks for mobile readability.",
+    "- Ground every claim, number, name, and fact strictly in the SOURCE MATERIAL. Never invent statistics, quotes, or details that are not in the source.",
+    "- Carry one clear idea and end with a takeaway or a natural question.",
     ...ANTI_AI_RULES,
     "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
     `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
@@ -396,10 +457,15 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   if (finishReason === "length" && posts.length) {
     posts[posts.length - 1] = tidyClippedTail(posts[posts.length - 1]);
   }
-  // Strip AI tells, then add fitting hashtags (not length-counted).
+  // Strip AI tells, self-refine against the rubric (grounded in the draft), then
+  // add fitting hashtags (not length-counted).
+  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length), exemplars);
   const withTags = [];
   for (const raw of posts.slice(0, n)) {
-    const body = deAiify(raw).slice(0, MAX_POST_LENGTH);
+    let body = deAiify(raw).slice(0, MAX_POST_LENGTH);
+    if (QUALITY) {
+      body = await refineDraft(provider, { draft: body, voiceSystem, targetChars: lengthTarget(length), grounded: true });
+    }
     const tags = await generateHashtags({ text: body, provider, language });
     withTags.push(appendHashtags(body, tags));
   }
