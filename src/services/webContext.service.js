@@ -158,5 +158,9 @@ export async function buildNewsContext(query, { articles = 3 } = {}) {
     .map((a, i) => `SOURCE ${i + 1}: ${a.title} (${a.url})\n${a.text.slice(0, 6000)}`)
     .join("\n\n---\n\n")
     .slice(0, MAX_TEXT_CHARS);
-  return { name: `News: ${query}`, text, sources: fetched.map((a) => a.url) };
+  return {
+    name: `News: ${query}`,
+    text,
+    sources: fetched.map((a) => ({ title: a.title || a.url, url: a.url })),
+  };
 }

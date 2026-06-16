@@ -334,6 +334,10 @@ label.radio input { width: auto; margin: 0 0.5rem 0 0; }
 .weekly-row { align-items: flex-end; }
 .generate-panel { margin-top: 1.25rem; background: linear-gradient(180deg, #f1f7ff, #ffffff); border-color: #cfe0f5; }
 .source-item strong { font-weight: 700; }
+.source-refs { flex-basis: 100%; margin-top: 0.4rem; font-size: 0.85rem; }
+.source-refs ul { margin: 0.15rem 0 0; padding-left: 1.1rem; }
+.source-refs li { margin: 0.1rem 0; }
+.source-refs a { word-break: break-word; }
 .queue-item { border-left: 3px solid var(--brand); }
 .queue-item textarea { min-height: 7rem; }
 #gen-count { max-width: 90px; }

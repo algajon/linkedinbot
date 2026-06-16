@@ -64,13 +64,14 @@ export async function createFromUrl(userId, url) {
       kind: "url",
       extractedText: compressText(`${title}\n${url}\n\n${text}`),
       charCount: text.length,
+      sourceUrls: [{ title: title || url, url }],
     },
   });
 }
 
 // Create a source from a live news search (Brave) on a topic.
 export async function createFromNews(userId, query) {
-  const { name, text } = await buildNewsContext(query);
+  const { name, text, sources } = await buildNewsContext(query);
   return prisma.contentSource.create({
     data: {
       userId,
@@ -79,6 +80,7 @@ export async function createFromNews(userId, query) {
       kind: "news",
       extractedText: compressText(text),
       charCount: text.length,
+      sourceUrls: sources || [],
     },
   });
 }
@@ -87,7 +89,7 @@ export function listSources(userId) {
   return prisma.contentSource.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, filename: true, charCount: true, createdAt: true },
+    select: { id: true, name: true, filename: true, kind: true, charCount: true, sourceUrls: true, createdAt: true },
   });
 }
 
