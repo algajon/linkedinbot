@@ -493,9 +493,9 @@ export async function generatePostsFromSource({
   const n = Math.max(1, Math.min(7, parseInt(count, 10) || 3));
   const target = lengthTarget(length);
 
-  // Editorial gate: should this author post this at all, and how?
+  // Read the topic only to decide HOW to write it (respectful tone for sensitive
+  // subjects). We never refuse a topic — every source produces a post.
   const assessment = await assessTopic(provider, { sourceText: source, voiceInstruction: resolveTone(tone), exemplars, strict });
-  if (!assessment.shouldPost) throw new TopicUnsuitableError(assessment.reason);
   const sensitive = assessment.sensitive;
   const effStance = sensitive ? "" : stance; // never apply a provocative stance to a tragedy
 
