@@ -85,9 +85,12 @@ export async function createFromNews(userId, query) {
   });
 }
 
+// "Your sources" lists deliberate, persistent material (uploaded PDFs and added
+// URLs). News topic searches are transient and surface as "Recent topics" chips
+// instead, so they are excluded here.
 export function listSources(userId) {
   return prisma.contentSource.findMany({
-    where: { userId },
+    where: { userId, kind: { not: "news" } },
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, filename: true, kind: true, charCount: true, sourceUrls: true, createdAt: true },
   });

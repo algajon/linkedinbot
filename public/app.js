@@ -297,16 +297,20 @@ function wireLengthToggle(selectId, customId) {
   const genAudience = document.getElementById("gen-audience");
   const genRun = document.getElementById("gen-run");
 
+  // Reveal the generate panel and point it at a given source.
+  function openGeneratePanelFor(sourceId, label) {
+    activeSourceId = sourceId;
+    if (!genPanel) return;
+    genPanel.hidden = false;
+    genPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    genStatus.textContent = "Editing: " + (label || "source") + " — choose options, then Generate drafts.";
+  }
+
   function wireGenerate(item) {
     const btn = item.querySelector(".generate-from");
     if (!btn) return;
     btn.addEventListener("click", function () {
-      activeSourceId = btn.dataset.sourceId;
-      if (genPanel) {
-        genPanel.hidden = false;
-        genPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        genStatus.textContent = "Editing: " + (item.querySelector("strong")?.textContent || "source") + " — choose options, then Generate drafts.";
-      }
+      openGeneratePanelFor(btn.dataset.sourceId, item.querySelector("strong")?.textContent);
     });
   }
 
@@ -441,10 +445,12 @@ function wireLengthToggle(selectId, customId) {
         const res = await fetch("/api/sources/news", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "News search failed.");
-        addSourceItem(data.source);
+        // News topics are transient: they don't join "Your sources", they show as
+        // a Recent-topics chip and open the generate panel so you can draft now.
         addRecentTopic(data.topic);
         newsInput.value = "";
-        newsStatus.textContent = "Added: " + data.source.name;
+        newsStatus.textContent = "Found: " + data.source.name;
+        openGeneratePanelFor(data.source.id, data.source.name);
       } catch (err) {
         newsStatus.textContent = err.message;
       } finally {
