@@ -12,6 +12,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import tonesRoutes from "./routes/tones.routes.js";
 import { sourcesPageRouter, sourcesApiRouter } from "./routes/sources.routes.js";
 import { routinesPageRouter, routinesApiRouter } from "./routes/routines.routes.js";
+import { suggestionsApiRouter } from "./routes/suggestions.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import { TONE_PRESETS } from "./services/ai.service.js";
 import { LANGUAGES, t } from "./utils/i18n.js";
@@ -99,6 +100,7 @@ export function createApp() {
   app.use("/api/tones", tonesRoutes);
   app.use("/api/sources", sourcesApiRouter);
   app.use("/api/routines", routinesApiRouter);
+  app.use("/api/suggestions", suggestionsApiRouter);
   app.use("/internal", internalRoutes);
   app.use("/", pageRouter);
   app.use("/", sourcesPageRouter);

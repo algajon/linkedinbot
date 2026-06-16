@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { createFromPdf, createFromUrl, createFromNews, listSources, getSource, deleteSource, decompressText } from "../services/contentSource.service.js";
 import { newsSearchEnabled } from "../services/webContext.service.js";
-import { generatePostsFromSource, parseExemplars, STANCES } from "../services/ai.service.js";
+import { generatePostsFromSource, parseExemplars, STANCES, POST_ARCHETYPES } from "../services/ai.service.js";
 import { getActiveRoutine } from "../services/routine.service.js";
 import { createWatch, listWatches, deleteWatch } from "../services/newsWatch.service.js";
 import { recordTopic, listRecentTopics, deleteTopic } from "../services/recentTopic.service.js";
@@ -28,6 +28,7 @@ export async function renderSources(req, res, next) {
       watches,
       recentTopics,
       stances: STANCES,
+      archetypes: POST_ARCHETYPES,
       newsEnabled: newsSearchEnabled(),
       linkedinReady: Boolean(req.user.linkedinAccount?.linkedinPersonUrn),
     });
@@ -171,6 +172,7 @@ export async function generateFromSource(req, res) {
       modelOverride,
       preferOpenAI,
       stance: req.body?.stance,
+      archetype: req.body?.archetype,
     });
 
     // Default timezone from the user's active routine, else UTC.

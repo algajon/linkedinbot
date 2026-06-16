@@ -49,11 +49,19 @@ export async function renderDashboard(req, res, next) {
       }),
     ]);
 
+    const savedTones = await prisma.tonePreset.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
+
     res.render("dashboard", {
       title: "Dashboard",
       upcoming,
       recentlyPublished,
       failed,
+      savedTones,
+      linkedinReady: Boolean(req.user.linkedinAccount?.linkedinPersonUrn),
       formatInZone,
       flash: {
         connected: req.query.linkedin_connected,

@@ -344,6 +344,14 @@ label.radio input { width: auto; margin: 0 0.5rem 0 0; }
 .topic-chip .topic-search:hover { text-decoration: underline; }
 .topic-chip .topic-remove { border: 0; background: transparent; color: #8aa; font-size: 1rem; line-height: 1; padding: 0.3rem 0.6rem 0.3rem 0.2rem; cursor: pointer; }
 .topic-chip .topic-remove:hover { color: #c0392b; }
+.ideas-card { background: linear-gradient(180deg, #f1f7ff, #ffffff); border-color: #cfe0f5; }
+.ideas-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.75rem; }
+.idea-item { border: 1px solid #e3e8ef; border-radius: 10px; padding: 0.85rem 1rem; background: #fff; }
+.idea-archetype { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--brand); background: #eaf2ff; border-radius: 999px; padding: 0.15rem 0.6rem; }
+.idea-angle { margin: 0.5rem 0 0.35rem; font-weight: 600; }
+.idea-source { display: inline-block; font-size: 0.85rem; word-break: break-word; }
+.idea-actions { margin-top: 0.6rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.idea-note { font-size: 0.85rem; }
 .queue-item { border-left: 3px solid var(--brand); }
 .queue-item textarea { min-height: 7rem; }
 #gen-count { max-width: 90px; }

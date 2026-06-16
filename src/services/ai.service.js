@@ -4,6 +4,7 @@
 import { MAX_POST_LENGTH } from "../utils/validation.js";
 import { languageName } from "../utils/postLanguages.js";
 import { lengthTarget } from "../utils/postLengths.js";
+import { searchNews } from "./webContext.service.js";
 
 const COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -311,6 +312,53 @@ export function resolveStance(stance) {
   return STANCES[stance]?.instruction || String(stance).slice(0, 300);
 }
 
+// Post archetypes: the FORMAT/shape of a post. These are the structures that
+// reliably earn engagement on LinkedIn, weighted toward warm, human, lifestyle
+// framings (the opposite of corporate filler). Selectable as a reusable preset
+// for routine posting. Free text passes through.
+export const POST_ARCHETYPES = {
+  story: {
+    label: "Personal story → lesson",
+    instruction:
+      "Open in the middle of one specific personal moment (a scene, a line someone said, a small detail). Tell it like a human remembering it, then let a single honest takeaway surface near the end. Warmth over polish.",
+  },
+  behind_scenes: {
+    label: "Behind the scenes",
+    instruction:
+      "Show the unglamorous reality behind the work, a day-in-the-life or how it actually gets done. Concrete and specific, a little messy, no corporate gloss.",
+  },
+  reflection: {
+    label: "Honest reflection",
+    instruction:
+      "Share a genuine reflection: something you changed your mind about, or a mistake and what it taught you. Vulnerable and real, never a humblebrag.",
+  },
+  gratitude: {
+    label: "People & gratitude",
+    instruction:
+      "Spotlight a person, team, or small act that mattered. Be specific and sincere, and make the other person the hero of the post, not yourself.",
+  },
+  relatable: {
+    label: "Relatable observation",
+    instruction:
+      "Name one small, true observation about work or everyday life that makes people quietly nod. Light, human, a touch of dry humor.",
+  },
+  contrarian: {
+    label: "Gentle contrarian take",
+    instruction:
+      "Question a common belief in the field, kindly and with reasons. Open a conversation rather than dunk on anyone.",
+  },
+  howto: {
+    label: "Actionable how-to",
+    instruction:
+      "Give a few concrete, usable steps drawn from real experience. Practical and generous, written like a person helping a friend, not a textbook.",
+  },
+};
+
+export function resolveArchetype(archetype) {
+  if (!archetype) return "";
+  return POST_ARCHETYPES[archetype]?.instruction || String(archetype).slice(0, 300);
+}
+
 export function resolveTone(tone) {
   if (!tone) return TONE_PRESETS.professional.instruction;
   const preset = TONE_PRESETS[tone];
@@ -510,7 +558,7 @@ export async function assessTopic(provider, { sourceText, voiceInstruction, exem
 }
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
-export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride } = {}) {
+export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride, archetype } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -523,7 +571,9 @@ export async function generatePost({ topic, tone, audience, language, length, ex
   const base = openaiProvider();
   const provider = modelOverride ? { ...base, model: modelOverride } : base;
   const target = lengthTarget(length);
-  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  let voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  const arch = resolveArchetype(archetype);
+  if (arch) voiceSystem += `\nFORMAT (post archetype): ${arch}`;
   const user = `Write a LinkedIn post about: ${String(topic).trim()}`;
 
   // Best-of-N: varied temperatures give different hooks/angles to choose from.
@@ -548,10 +598,64 @@ export async function generatePost({ topic, tone, audience, language, length, ex
   return appendHashtags(best, tags);
 }
 
+// Daily idea engine: turn fresh news in the user's field into warm, human post
+// ideas. Each idea = a real article + a best-fit archetype + a one-line human
+// angle. The user one-click drafts any idea. Returns [] when nothing fits.
+export async function suggestTopics({ focus, count = 5 } = {}) {
+  const provider = openaiProvider();
+  if (!provider) throw new Error("OPENAI_API_KEY is not configured.");
+  const f = String(focus || "").trim();
+  if (!f) throw new Error("A focus topic is required to suggest ideas.");
+
+  const results = (await searchNews(f, { count: Math.max(count + 5, 10) })).filter((r) => r.url && r.title);
+  if (!results.length) throw new Error(`No recent news found for "${f}". Try a broader topic.`);
+  const items = results.slice(0, 10);
+
+  const archetypeList = Object.entries(POST_ARCHETYPES).map(([k, v]) => `${k} (${v.label})`).join(", ");
+  const sys = [
+    "You help a LinkedIn creator turn fresh news headlines into warm, human, lifestyle-flavored post ideas, never corporate or hypey.",
+    `For each promising headline, propose ONE idea: pick the best-fit archetype from [${archetypeList}] and write a single human ANGLE sentence the author could take, grounded in that headline.`,
+    "Strongly favor personal, reflective, relatable, behind-the-scenes, and gratitude framings. Skip pure tragedy or anything that can't be made genuinely human.",
+    `Choose the best ${count} headlines. Return ONLY JSON: {"ideas":[{"index":<headline number>,"archetype":"<key>","angle":"<one sentence>"}]}.`,
+  ].join("\n");
+  const user = items.map((r, i) => `${i}. ${r.title}`).join("\n");
+
+  let parsed = {};
+  try {
+    const { content } = await chatCompletion(provider, {
+      messages: [{ role: "system", content: sys }, { role: "user", content: user }],
+      temperature: 0.6,
+      maxTokens: 600,
+      jsonMode: true,
+    });
+    parsed = JSON.parse(content.replace(/<think>[\s\S]*?<\/think>/gi, "").match(/\{[\s\S]*\}/)?.[0] || "{}");
+  } catch {
+    parsed = {};
+  }
+  const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
+  const out = [];
+  const usedUrls = new Set();
+  for (const it of ideas) {
+    const r = items[it.index];
+    if (!r || usedUrls.has(r.url)) continue;
+    usedUrls.add(r.url);
+    const key = POST_ARCHETYPES[it.archetype] ? it.archetype : "story";
+    out.push({
+      title: r.title,
+      url: r.url,
+      archetype: key,
+      archetypeLabel: POST_ARCHETYPES[key].label,
+      angle: String(it.angle || "").slice(0, 300),
+    });
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
 export async function generatePostsFromSource({
-  sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance, preferOpenAI, modelOverride, strict = false,
+  sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance, preferOpenAI, modelOverride, strict = false, archetype,
 } = {}) {
   // Provider routing: public material (news/URL) prefers OpenAI for quality;
   // confidential uploads keep generation on the on-prem cluster (sovereignty).
@@ -576,7 +680,9 @@ export async function generatePostsFromSource({
   const sensitive = assessment.sensitive;
   const effStance = sensitive ? "" : stance; // never apply a provocative stance to a tragedy
 
-  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  let voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  const arch = resolveArchetype(archetype);
+  if (arch) voiceSystem += `\nFORMAT (post archetype): ${arch}`;
   const sourceRules = [
     "Use the SOURCE MATERIAL below. Ground every claim, number, name, and quote strictly in it; never invent facts.",
     !sensitive && resolveStance(effStance)

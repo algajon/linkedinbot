@@ -505,6 +505,7 @@ function wireLengthToggle(selectId, customId) {
             language: (document.getElementById("gen-language") || {}).value || "en",
             length: pickLength("gen-length", "gen-length-custom"),
             stance: (document.getElementById("gen-stance") || {}).value || "",
+            archetype: (document.getElementById("gen-archetype") || {}).value || "",
           }),
         });
         const data = await res.json();
@@ -557,5 +558,102 @@ function wireLengthToggle(selectId, customId) {
       li.appendChild(img);
       preview.appendChild(li);
     });
+  });
+})();
+
+// ---- Dashboard: daily topic ideas (news-driven, one-click draft) ----------
+(function () {
+  const runBtn = document.getElementById("ideas-run");
+  if (!runBtn) return;
+  const card = document.querySelector(".ideas-card");
+  const focusInput = document.getElementById("ideas-focus");
+  const toneSelect = document.getElementById("ideas-tone");
+  const statusEl = document.getElementById("ideas-status");
+  const list = document.getElementById("ideas-list");
+  const linkedinReady = card && card.dataset.linkedinReady === "1";
+
+  function ideaCard(idea) {
+    const li = document.createElement("li");
+    li.className = "idea-item";
+
+    const badge = document.createElement("span");
+    badge.className = "idea-archetype";
+    badge.textContent = idea.archetypeLabel || "Idea";
+    li.appendChild(badge);
+
+    const angle = document.createElement("p");
+    angle.className = "idea-angle";
+    angle.textContent = idea.angle || idea.title;
+    li.appendChild(angle);
+
+    const src = document.createElement("a");
+    src.className = "idea-source muted";
+    src.href = idea.url; src.target = "_blank"; src.rel = "noopener noreferrer";
+    src.textContent = idea.title;
+    li.appendChild(src);
+
+    const actions = document.createElement("div");
+    actions.className = "idea-actions";
+    const draftBtn = document.createElement("button");
+    draftBtn.type = "button";
+    draftBtn.className = "btn small primary";
+    draftBtn.textContent = "Draft it";
+    draftBtn.disabled = !linkedinReady;
+    if (!linkedinReady) draftBtn.title = "Connect LinkedIn first";
+    const note = document.createElement("span");
+    note.className = "idea-note muted";
+    actions.appendChild(draftBtn);
+    actions.appendChild(note);
+    li.appendChild(actions);
+
+    draftBtn.addEventListener("click", async function () {
+      draftBtn.disabled = true;
+      note.textContent = "Drafting…";
+      try {
+        const res = await fetch("/api/suggestions/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: idea.url,
+            title: idea.title,
+            archetype: idea.archetype,
+            angle: idea.angle,
+            tonePresetId: toneSelect ? toneSelect.value : "",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not draft.");
+        note.innerHTML = 'Drafted. <a href="/queue">Review in queue →</a>';
+      } catch (err) {
+        note.textContent = err.message;
+        draftBtn.disabled = false;
+      }
+    });
+    return li;
+  }
+
+  runBtn.addEventListener("click", async function () {
+    runBtn.disabled = true;
+    statusEl.textContent = "Finding fresh ideas…";
+    list.innerHTML = "";
+    try {
+      const res = await fetch("/api/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ focus: focusInput ? focusInput.value.trim() : "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not get ideas.");
+      if (!data.ideas || !data.ideas.length) {
+        statusEl.textContent = "No ideas found, try a different focus.";
+      } else {
+        statusEl.textContent = "Ideas from news on: " + data.focus;
+        data.ideas.forEach((idea) => list.appendChild(ideaCard(idea)));
+      }
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      runBtn.disabled = false;
+    }
   });
 })();

@@ -107,6 +107,15 @@
         </select>
       </label>
       <label>
+        <%= t("sources.archetype") %>
+        <select id="gen-archetype">
+          <option value=""><%= t("ai.audience.optional") %></option>
+          <% Object.entries(archetypes).forEach(([key, a]) => { %>
+            <option value="<%= key %>"><%= a.label %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>
         <%= t("sources.count") %>
         <input type="number" id="gen-count" min="1" max="7" value="3" />
       </label>

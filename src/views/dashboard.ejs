@@ -24,6 +24,29 @@
   <% } %>
 </section>
 
+<section class="card ideas-card" data-linkedin-ready="<%= linkedinReady ? '1' : '0' %>">
+  <h3><%= t("ideas.title") %></h3>
+  <p class="muted"><%= t("ideas.intro") %></p>
+  <div class="ai-controls" style="align-items:flex-end">
+    <label style="flex:2 1 240px">
+      <%= t("ideas.focus") %>
+      <input type="text" id="ideas-focus" placeholder="<%= t("ideas.focusph") %>" />
+    </label>
+    <% if (savedTones && savedTones.length) { %>
+    <label>
+      <%= t("ai.tone") %>
+      <select id="ideas-tone">
+        <option value="">—</option>
+        <% savedTones.forEach((p) => { %><option value="<%= p.id %>"><%= p.name %></option><% }) %>
+      </select>
+    </label>
+    <% } %>
+    <button type="button" id="ideas-run" class="btn primary"><%= t("ideas.suggest") %></button>
+    <span id="ideas-status" class="muted" role="status" aria-live="polite"></span>
+  </div>
+  <ul id="ideas-list" class="ideas-list"></ul>
+</section>
+
 <div class="grid-2">
   <section class="card">
     <h3><%= t("post.upcoming") %></h3>
