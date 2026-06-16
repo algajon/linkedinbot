@@ -72,6 +72,7 @@ async function processWatch(w) {
       stance: w.stance || "take",
       preferOpenAI: true, // news is public material
       modelOverride,
+      strict: true, // automated feed: skip topics of doubtful relevance to this author
     });
   } catch (e) {
     if (e.code === "TOPIC_UNSUITABLE") {

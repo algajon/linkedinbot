@@ -390,7 +390,7 @@ export class TopicUnsuitableError extends Error {
 // Editorial gate: given source material and the author's voice/domain, decide
 // whether THIS author should post about it, whether it's sensitive, and the
 // appropriate angle. Conservative by design (declines newsjacking/off-topic).
-export async function assessTopic(provider, { sourceText, voiceInstruction, exemplars } = {}) {
+export async function assessTopic(provider, { sourceText, voiceInstruction, exemplars, strict = false } = {}) {
   if (!provider) return { shouldPost: true, sensitive: false, angle: "", reason: "" };
   const domain = (exemplars || [])
     .slice(0, 4)
@@ -402,8 +402,14 @@ export async function assessTopic(provider, { sourceText, voiceInstruction, exem
     domain ? `The author normally posts about: ${domain}` : "",
     "Decide whether this author should post about the material below, and how.",
     'Return ONLY JSON: {"shouldPost": boolean, "sensitive": boolean, "angle": "<one sentence>", "reason": "<brief>"}.',
-    "shouldPost=false if the subject is outside the author's field, or a tragedy/disaster/loss/politics they have no genuine standing to comment on, or anything that would read as newsjacking. When unsure about relevance or taste, choose false.",
-    "sensitive=true for loss of life, tragedy, disaster, violence, layoffs, politics, or similar; then the angle must be respectful with no business lesson, no self-promotion, and no engagement-bait question.",
+    // RELEVANCE drives shouldPost — NOT sensitivity.
+    "shouldPost is about RELEVANCE and standing, not sensitivity. Set shouldPost=true when the subject is in or adjacent to the author's field/expertise/interests, or a moment they could authentically and appropriately acknowledge.",
+    "Set shouldPost=false ONLY when the subject is clearly outside the author's world or commenting would look like opportunistic newsjacking of an unrelated event.",
+    "Do NOT set shouldPost=false merely because the topic is sad or sensitive — a sensitive topic the author can genuinely speak to SHOULD still be posted, just respectfully.",
+    "sensitive=true for loss of life, tragedy, disaster, violence, layoffs, or politics. When sensitive, the angle must be respectful: no business lesson, no self-promotion, no engagement-bait question.",
+    strict
+      ? "This is for an automated feed: if relevance is genuinely doubtful, prefer shouldPost=false."
+      : "The author explicitly chose this material, so lean toward shouldPost=true; only decline when the mismatch is clear.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -468,7 +474,7 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
 export async function generatePostsFromSource({
-  sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance, preferOpenAI, modelOverride,
+  sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance, preferOpenAI, modelOverride, strict = false,
 } = {}) {
   // Provider routing: public material (news/URL) prefers OpenAI for quality;
   // confidential uploads keep generation on the on-prem cluster (sovereignty).
@@ -488,7 +494,7 @@ export async function generatePostsFromSource({
   const target = lengthTarget(length);
 
   // Editorial gate: should this author post this at all, and how?
-  const assessment = await assessTopic(provider, { sourceText: source, voiceInstruction: resolveTone(tone), exemplars });
+  const assessment = await assessTopic(provider, { sourceText: source, voiceInstruction: resolveTone(tone), exemplars, strict });
   if (!assessment.shouldPost) throw new TopicUnsuitableError(assessment.reason);
   const sensitive = assessment.sensitive;
   const effStance = sensitive ? "" : stance; // never apply a provocative stance to a tragedy
