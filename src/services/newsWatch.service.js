@@ -50,11 +50,13 @@ async function processWatch(w) {
 
   let tone;
   let exemplars = [];
+  let modelOverride;
   if (w.tonePresetId) {
     const p = await prisma.tonePreset.findFirst({ where: { id: w.tonePresetId, userId: w.userId } });
     if (p) {
       tone = p.instruction;
       exemplars = parseExemplars(p.sampleText);
+      modelOverride = p.openaiModel || undefined;
     }
   }
 
@@ -68,6 +70,8 @@ async function processWatch(w) {
       length: "medium",
       count: 1,
       stance: w.stance || "take",
+      preferOpenAI: true, // news is public material
+      modelOverride,
     });
   } catch (e) {
     if (e.code === "TOPIC_UNSUITABLE") {

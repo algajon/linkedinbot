@@ -180,7 +180,7 @@ function tidyClippedTail(text) {
 // returned tags are appended AFTER generation, so they don't count toward the
 // post's length budget. Returns a space-separated string (or "" on failure).
 export async function generateHashtags({ text, provider, language, count = 4 } = {}) {
-  const tagProvider = openaiProvider() || provider;
+  const tagProvider = provider || openaiProvider();
   if (!tagProvider || !String(text || "").trim()) return "";
   const sys = [
     "You are a LinkedIn hashtag specialist.",
@@ -467,20 +467,25 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 
 // Generate several distinct LinkedIn post drafts grounded in source material
 // (e.g. extracted PDF text), all in the resolved tone. Returns string[].
-export async function generatePostsFromSource({ sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance } = {}) {
-  let provider = sourceProvider();
+export async function generatePostsFromSource({
+  sourceText, tone, count = 3, audience, language, length, exemplars, loraModel, stance, preferOpenAI, modelOverride,
+} = {}) {
+  // Provider routing: public material (news/URL) prefers OpenAI for quality;
+  // confidential uploads keep generation on the on-prem cluster (sovereignty).
+  let provider = preferOpenAI ? openaiProvider() || sourceProvider() : sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
   }
-  // Route to a per-author LoRA adapter served by vLLM, if one is set.
-  if (loraModel && provider.name?.startsWith("DGX")) {
-    provider = { ...provider, model: loraModel };
-  }
+  // Apply the per-author fine-tuned model for whichever provider we landed on.
+  if (provider.name?.startsWith("DGX") && loraModel) provider = { ...provider, model: loraModel };
+  else if (provider.name === "OpenAI" && modelOverride) provider = { ...provider, model: modelOverride };
+
   const source = String(sourceText || "").trim();
   if (source.length < 40) {
     throw new Error("The content source has too little text to generate from.");
   }
   const n = Math.max(1, Math.min(7, parseInt(count, 10) || 3));
+  const target = lengthTarget(length);
 
   // Editorial gate: should this author post this at all, and how?
   const assessment = await assessTopic(provider, { sourceText: source, voiceInstruction: resolveTone(tone), exemplars });
@@ -488,82 +493,40 @@ export async function generatePostsFromSource({ sourceText, tone, count = 3, aud
   const sensitive = assessment.sensitive;
   const effStance = sensitive ? "" : stance; // never apply a provocative stance to a tragedy
 
-  const systemPrompt = [
-    "You are an expert LinkedIn ghostwriter. Using the SOURCE MATERIAL provided, write original LinkedIn posts.",
-    `Tone of voice: ${resolveTone(tone)}`,
-    language ? `Write every post in ${languageName(language)}.` : "",
-    audience ? `Target audience: ${audience}.` : "",
-    `Produce exactly ${n} DISTINCT posts, each covering a different angle, insight, or theme drawn from the source — do not repeat the same point.`,
-    "Each post must:",
-    "- Be ready to publish: no preamble, no quotation marks, no markdown headings.",
-    "- Open with a strong scroll-stopping hook in the first line.",
-    "- Use short paragraphs and line breaks for mobile readability.",
-    "- Ground every claim, number, name, and fact strictly in the SOURCE MATERIAL. Never invent statistics, quotes, or details that are not in the source.",
-    "- Carry one clear idea and end with a takeaway or a natural question.",
+  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
+  const sourceRules = [
+    "Use the SOURCE MATERIAL below. Ground every claim, number, name, and quote strictly in it; never invent facts.",
     !sensitive && resolveStance(effStance)
-      ? `- ANGLE: ${resolveStance(effStance)} This is the author's commentary/opinion on the material, not a neutral summary — but every fact must still come from the source.`
+      ? `Angle: ${resolveStance(effStance)} This is the author's commentary/opinion, not a neutral summary.`
       : "",
-    !sensitive && !resolveStance(effStance) && assessment.angle
-      ? `- ANGLE: ${assessment.angle}`
-      : "",
-    ...ANTI_AI_RULES,
-    ...COHERENCE_RULES,
+    !sensitive && !resolveStance(effStance) && assessment.angle ? `Angle: ${assessment.angle}` : "",
     ...(sensitive ? SENSITIVITY_RULES : []),
-    "- Do NOT add hashtags; they are generated separately and must not count toward the length budget.",
-    `- LENGTH BUDGET: about ${lengthTarget(length)} characters each — be ruthlessly concise, say the same thing with fewer words, and finish each post's final sentence within the budget.`,
-    `- Never exceed ${MAX_POST_LENGTH} characters.`,
-    `Output the ${n} posts as plain text, separated by a line containing only:`,
-    "===POST===",
-    "Do not number them and write nothing before the first post or after the last.",
-    exemplarBlock(exemplars) ? `\n${exemplarBlock(exemplars)}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+    "Write exactly ONE LinkedIn post.",
+  ].filter(Boolean).join("\n");
 
   // eslint-disable-next-line no-console
-  console.log(`[ai] source generation via ${provider.name} (${provider.model})`);
-  const { content, finishReason } = await chatCompletion(provider, {
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `SOURCE MATERIAL:\n\n${source.slice(0, 40000)}` },
-    ],
-    temperature: 0.85,
-    // Per-post token budget scaled to the target length, times the post count.
-    maxTokens: (Math.ceil(lengthTarget(length) / 4) + 14) * n,
-  });
+  console.log(`[ai] source generation via ${provider.name} (${provider.model}) x${n}`);
 
-  // Posts are separated by a delimiter line. This is robust to multi-line post
-  // bodies and works across providers (no JSON-escaping pitfalls). Strip any
-  // reasoning <think> block first (reasoning models).
-  const posts = content
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .replace(/^```[a-z]*\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .split(/\r?\n?\s*={2,}\s*POST\s*={2,}\s*\r?\n?/i)
-    // Strip any trailing partial delimiter the token cap may have clipped (e.g. "===").
-    .map((p) => p.replace(/\s*={2,}[\s\S]*$/, "").trim())
-    .filter(Boolean)
-    .map((p) => p.slice(0, MAX_POST_LENGTH));
-  if (!posts.length) {
-    throw new Error(`${provider.name} returned no usable posts.`);
-  }
-  // If the cap clipped output, only the last post can be cut off — tidy its tail.
-  if (finishReason === "length" && posts.length) {
-    posts[posts.length - 1] = tidyClippedTail(posts[posts.length - 1]);
-  }
-  // Strip AI tells, self-refine against the rubric (grounded in the draft), then
-  // add fitting hashtags (not length-counted).
-  const voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, lengthTarget(length), exemplars);
-  const withTags = [];
-  for (const raw of posts.slice(0, n)) {
-    let body = deAiify(raw).slice(0, MAX_POST_LENGTH);
-    if (QUALITY) {
-      body = await refineDraft(provider, { draft: body, voiceSystem, targetChars: lengthTarget(length), grounded: true });
-    }
+  // One request per post — reliable count, and we steer each toward a fresh
+  // angle by telling it which openings are already taken.
+  const out = [];
+  const priorHooks = [];
+  for (let i = 0; i < n; i++) {
+    const distinct = priorHooks.length
+      ? `\nTake a DIFFERENT angle from these already-used openings: ${priorHooks.join(" / ")}`
+      : "";
+    const system = `${voiceSystem}\n\n${sourceRules}${distinct}`;
+    const user = `SOURCE MATERIAL:\n\n${source.slice(0, 40000)}\n\nWrite one LinkedIn post now.`;
+    let body = await draftPost(provider, { system, user, targetChars: target, temperature: 0.9 }).catch(() => "");
+    if (!body) continue;
+    if (QUALITY) body = await refineDraft(provider, { draft: body, voiceSystem, targetChars: target, grounded: true });
+    body = body.slice(0, MAX_POST_LENGTH);
+    priorHooks.push(body.split("\n")[0].slice(0, 60));
     const tags = await generateHashtags({ text: body, provider, language });
-    withTags.push(appendHashtags(body, tags));
+    out.push(appendHashtags(body, tags));
   }
-  return withTags;
+  if (!out.length) throw new Error(`${provider.name} returned no usable posts.`);
+  return out;
 }
 
 // Analyze example posts and distill a reusable tone-of-voice instruction that

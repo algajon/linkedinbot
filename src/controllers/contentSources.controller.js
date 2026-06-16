@@ -127,6 +127,7 @@ export async function generateFromSource(req, res) {
     let tone = req.body?.tone;
     let exemplars = [];
     let loraModel;
+    let modelOverride;
     if (req.body?.tonePresetId) {
       const preset = await prisma.tonePreset.findFirst({
         where: { id: req.body.tonePresetId, userId: req.user.id },
@@ -134,9 +135,13 @@ export async function generateFromSource(req, res) {
       if (preset) {
         tone = preset.instruction;
         exemplars = parseExemplars(preset.sampleText);
-        loraModel = preset.dgxLora || undefined; // per-author LoRA adapter, if any
+        loraModel = preset.dgxLora || undefined; // per-author LoRA adapter (on-prem)
+        modelOverride = preset.openaiModel || undefined; // fine-tuned OpenAI model
       }
     }
+
+    // Public material (news/URL) -> OpenAI; uploaded docs (pdf) -> on-prem cluster.
+    const preferOpenAI = source.kind !== "pdf";
 
     const bodies = await generatePostsFromSource({
       sourceText: decompressText(source.extractedText),
@@ -147,6 +152,8 @@ export async function generateFromSource(req, res) {
       length: req.body?.length,
       exemplars,
       loraModel,
+      modelOverride,
+      preferOpenAI,
       stance: req.body?.stance,
     });
 

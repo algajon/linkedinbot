@@ -65,6 +65,7 @@ model ContentSource {
   userId        String
   name          String
   filename      String?
+  kind          String   @default("pdf") // pdf | url | news
   extractedText String
   charCount     Int      @default(0)
   createdAt     DateTime @default(now())
