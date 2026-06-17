@@ -59,9 +59,10 @@
       </li>
     <% }) %>
   </ul>
+</section>
 
-  <div class="generate-panel card" id="generate-panel" hidden>
-    <h3><%= t("sources.generate") %></h3>
+<section class="card generate-panel" id="generate-panel" hidden>
+  <h3><%= t("sources.generate") %></h3>
     <div class="ai-controls">
       <label>
         <%= t("ai.tone") %>
@@ -129,7 +130,6 @@
       <button type="button" id="gen-run" class="btn primary" <%= linkedinReady ? "" : "disabled" %>><%= t("sources.generate") %></button>
       <span id="gen-status" class="muted" role="status" aria-live="polite"></span>
     </div>
-  </div>
 </section>
 
 <section class="card">
