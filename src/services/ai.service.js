@@ -37,7 +37,7 @@ function anthropicProvider() {
     kind: "anthropic",
     baseUrl: "https://api.anthropic.com/v1",
     apiKey,
-    model: process.env.ANTHROPIC_MODEL || "claude-opus-4-8",
+    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
     headers: {},
     supportsJsonMode: false, // no response_format; rely on prompt + parse
   };
