@@ -31,36 +31,6 @@
   <div id="news-results" class="news-results"></div>
 </section>
 
-<section class="card">
-  <h3><%= t("sources.your") %></h3>
-  <% if (!sources.length) { %>
-    <p class="empty" id="no-sources"><%= t("sources.none") %></p>
-  <% } %>
-  <ul id="source-list" class="post-mini-list">
-    <% sources.forEach((s) => { %>
-      <li class="source-item" data-source-id="<%= s.id %>">
-        <strong><%= s.name %></strong>
-        <span class="muted">· <%= s.charCount %> <%= t("sources.chars") %></span>
-        <span class="row-actions">
-          <button type="button" class="btn small generate-from" data-source-id="<%= s.id %>"><%= t("sources.editdrafts") %></button>
-          <button type="button" class="btn small ghost delete-source" data-source-id="<%= s.id %>"><%= t("common.delete") %></button>
-        </span>
-        <% const urls = Array.isArray(s.sourceUrls) ? s.sourceUrls : []; %>
-        <% if (urls.length) { %>
-          <div class="source-refs">
-            <span class="muted"><%= t("sources.verify") %></span>
-            <ul>
-              <% urls.forEach((r) => { let host = r.url; try { host = new URL(r.url).hostname.replace(/^www\./, ""); } catch (e) {} %>
-                <li><a href="<%= r.url %>" target="_blank" rel="noopener noreferrer" title="<%= r.title || r.url %>"><%= r.title || r.url %></a> <span class="muted">(<%= host %>)</span></li>
-              <% }) %>
-            </ul>
-          </div>
-        <% } %>
-      </li>
-    <% }) %>
-  </ul>
-</section>
-
 <section class="card generate-panel" id="generate-panel" hidden>
   <h3><%= t("sources.generate") %></h3>
     <div class="ai-controls">
@@ -178,6 +148,36 @@
       <% }) %>
     </ul>
   <% } %>
+</section>
+
+<section class="card">
+  <h3><%= t("sources.your") %></h3>
+  <% if (!sources.length) { %>
+    <p class="empty" id="no-sources"><%= t("sources.none") %></p>
+  <% } %>
+  <ul id="source-list" class="post-mini-list">
+    <% sources.forEach((s) => { %>
+      <li class="source-item" data-source-id="<%= s.id %>">
+        <strong><%= s.name %></strong>
+        <span class="muted">· <%= s.charCount %> <%= t("sources.chars") %></span>
+        <span class="row-actions">
+          <button type="button" class="btn small generate-from" data-source-id="<%= s.id %>"><%= t("sources.editdrafts") %></button>
+          <button type="button" class="btn small ghost delete-source" data-source-id="<%= s.id %>"><%= t("common.delete") %></button>
+        </span>
+        <% const urls = Array.isArray(s.sourceUrls) ? s.sourceUrls : []; %>
+        <% if (urls.length) { %>
+          <div class="source-refs">
+            <span class="muted"><%= t("sources.verify") %></span>
+            <ul>
+              <% urls.forEach((r) => { let host = r.url; try { host = new URL(r.url).hostname.replace(/^www\./, ""); } catch (e) {} %>
+                <li><a href="<%= r.url %>" target="_blank" rel="noopener noreferrer" title="<%= r.title || r.url %>"><%= r.title || r.url %></a> <span class="muted">(<%= host %>)</span></li>
+              <% }) %>
+            </ul>
+          </div>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
 </section>
 
 <section class="card">
