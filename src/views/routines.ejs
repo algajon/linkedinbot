@@ -8,6 +8,29 @@
 <% } %>
 
 <section class="card">
+  <h3><%= t("routines.presets") %></h3>
+  <p class="muted"><%= t("routines.presetsintro") %></p>
+  <form action="/routines/presets" method="post">
+    <label class="preset-tz"><%= t("post.timezone") %>
+      <select name="timezone">
+        <% timezones.forEach((tz) => { %><option value="<%= tz %>"<%= tz === "Europe/Berlin" ? " selected" : "" %>><%= tz %></option><% }) %>
+      </select>
+    </label>
+    <ul class="preset-list">
+      <% (routinePresets || []).forEach((p) => { %>
+        <li class="preset-item">
+          <div>
+            <strong><%= p.name %></strong>
+            <span class="muted"><%= p.description %></span>
+          </div>
+          <button type="submit" name="preset" value="<%= p.key %>" class="btn small primary"><%= t("routines.use") %></button>
+        </li>
+      <% }) %>
+    </ul>
+  </form>
+</section>
+
+<section class="card">
   <h3><%= t("routines.create") %></h3>
   <form action="/routines" method="post" class="stack" id="routine-form">
     <label><%= t("routines.name") %><input type="text" name="name" placeholder="e.g. Weekday mornings" required /></label>

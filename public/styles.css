@@ -352,6 +352,12 @@ label.radio input { width: auto; margin: 0 0.5rem 0 0; }
 .idea-source { display: inline-block; font-size: 0.85rem; word-break: break-word; }
 .idea-actions { margin-top: 0.6rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .idea-note { font-size: 0.85rem; }
+.preset-tz { display: inline-block; margin-bottom: 0.75rem; }
+.preset-tz select { max-width: 280px; }
+.preset-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.preset-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid #e3e8ef; border-radius: 10px; padding: 0.7rem 0.9rem; background: #fff; }
+.preset-item strong { display: block; }
+.preset-item .muted { font-size: 0.85rem; }
 .queue-item { border-left: 3px solid var(--brand); }
 .queue-item textarea { min-height: 7rem; }
 #gen-count { max-width: 90px; }

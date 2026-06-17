@@ -1,8 +1,10 @@
 import {
   listRoutines,
   createRoutine,
+  createRoutineFromPreset,
   deleteRoutine,
   normalizeRoutineInput,
+  ROUTINE_PRESETS,
 } from "../services/routine.service.js";
 import { COMMON_TIMEZONES } from "../utils/date.js";
 
@@ -16,7 +18,22 @@ export async function renderRoutines(req, res, next) {
       routines,
       timezones: COMMON_TIMEZONES,
       weekdays: WEEKDAYS,
+      routinePresets: ROUTINE_PRESETS,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function applyPresetHandler(req, res, next) {
+  try {
+    const created = await createRoutineFromPreset(req.user.id, req.body?.preset, req.body?.timezone);
+    if (!created) {
+      if (req.baseUrl.startsWith("/api")) return res.status(400).json({ error: "Unknown preset." });
+      return res.redirect("/routines");
+    }
+    if (req.baseUrl.startsWith("/api")) return res.status(201).json({ routine: created });
+    res.redirect("/routines");
   } catch (err) {
     next(err);
   }
@@ -33,6 +50,7 @@ export async function createRoutineHandler(req, res, next) {
         routines,
         timezones: COMMON_TIMEZONES,
         weekdays: WEEKDAYS,
+        routinePresets: ROUTINE_PRESETS,
         errors,
       });
     }

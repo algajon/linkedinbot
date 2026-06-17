@@ -4,6 +4,40 @@ import { isValidTimezone } from "../utils/date.js";
 
 export const CADENCES = ["EVERY_12H", "EVERY_24H", "WEEKLY"];
 
+// Ready-made cadences based on widely-cited LinkedIn best practices: post on
+// weekdays, mid-morning, and above all consistently. Tue–Thu draw the most
+// engagement; weekends are weakest. Weekday is 0=Sun..6=Sat.
+export const ROUTINE_PRESETS = [
+  {
+    key: "weekday_mornings",
+    name: "Weekday mornings (Tue–Thu)",
+    description: "3 posts a week on the highest-engagement days, 8am. The LinkedIn sweet spot.",
+    cadence: "WEEKLY",
+    slots: [{ weekday: 2, time: "08:00" }, { weekday: 3, time: "08:00" }, { weekday: 4, time: "08:00" }],
+  },
+  {
+    key: "twice_weekly",
+    name: "Steady 2×/week (Tue + Thu)",
+    description: "A sustainable, consistent cadence at 10am. Easy to keep up long term.",
+    cadence: "WEEKLY",
+    slots: [{ weekday: 2, time: "10:00" }, { weekday: 4, time: "10:00" }],
+  },
+  {
+    key: "every_weekday",
+    name: "Every weekday at 9am",
+    description: "Daily weekday presence. Best when you have a steady stream of ideas.",
+    cadence: "WEEKLY",
+    slots: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, time: "09:00" })),
+  },
+  {
+    key: "daily_9am",
+    name: "Once a day, 9am",
+    description: "Simple daily cadence (includes weekends). One slot per day.",
+    cadence: "EVERY_24H",
+    anchorTime: "09:00",
+  },
+];
+
 function parseHM(hm, fallbackHour = 9) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || "").trim());
   if (!m) return { hour: fallbackHour, minute: 0 };
@@ -57,6 +91,23 @@ export function getActiveRoutine(userId) {
 
 export function createRoutine(userId, value) {
   return prisma.postingRoutine.create({ data: { userId, ...value } });
+}
+
+// Create a routine from a ROUTINE_PRESETS entry, in the chosen timezone.
+export function createRoutineFromPreset(userId, key, timezone) {
+  const preset = ROUTINE_PRESETS.find((p) => p.key === key);
+  if (!preset) return null;
+  const tz = isValidTimezone(timezone) ? timezone : "UTC";
+  return prisma.postingRoutine.create({
+    data: {
+      userId,
+      name: preset.name,
+      cadence: preset.cadence,
+      timezone: tz,
+      anchorTime: preset.anchorTime || null,
+      slots: preset.slots || null,
+    },
+  });
 }
 
 export async function deleteRoutine(id, userId) {
