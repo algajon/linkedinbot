@@ -363,6 +363,35 @@ function wireLengthToggle(selectId, customId) {
     wireGenerate(item);
   }
 
+  // Transient result for a news-topic search: shows the article links + a button
+  // to generate drafts, WITHOUT adding a persistent card to "Your sources".
+  function renderNewsResult(source) {
+    const box = document.getElementById("news-results");
+    if (!box) return;
+    box.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "news-result source-item";
+
+    const strong = document.createElement("strong");
+    strong.textContent = source.name;
+    card.appendChild(strong);
+
+    const actions = document.createElement("span");
+    actions.className = "row-actions";
+    const genBtn = document.createElement("button");
+    genBtn.type = "button";
+    genBtn.className = "btn small primary";
+    genBtn.textContent = "Generate drafts";
+    genBtn.addEventListener("click", function () {
+      openGeneratePanelFor(source.id, source.name);
+    });
+    actions.appendChild(genBtn);
+    card.appendChild(actions);
+
+    renderRefs(card, source.sourceUrls); // the verify hyperlinks, shown immediately
+    box.appendChild(card);
+  }
+
   // Add a source from a news/article URL.
   const urlBtn = document.getElementById("source-url-btn");
   if (urlBtn) {
@@ -445,12 +474,13 @@ function wireLengthToggle(selectId, customId) {
         const res = await fetch("/api/sources/news", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "News search failed.");
-        // News topics are transient: they don't join "Your sources", they show as
-        // a Recent-topics chip and open the generate panel so you can draft now.
+        // News topics are transient: instead of a card in "Your sources" they
+        // get an inline result (article links + a Generate button) plus a
+        // Recent-topics chip at the bottom.
+        renderNewsResult(data.source);
         addRecentTopic(data.topic);
         newsInput.value = "";
-        newsStatus.textContent = "Found: " + data.source.name;
-        openGeneratePanelFor(data.source.id, data.source.name);
+        newsStatus.textContent = "Found articles for: " + query;
       } catch (err) {
         newsStatus.textContent = err.message;
       } finally {
