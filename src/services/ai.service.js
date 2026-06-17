@@ -6,8 +6,6 @@ import { languageName } from "../utils/postLanguages.js";
 import { lengthTarget } from "../utils/postLengths.js";
 import { searchNews } from "./webContext.service.js";
 
-const COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
-
 // ---- LLM providers -------------------------------------------------------
 // vLLM on the on-prem DGX Spark cluster is OpenAI-compatible, so a provider is
 // just a base URL + key + model (+ optional headers). Source generation runs
@@ -25,6 +23,30 @@ function openaiProvider() {
     headers: {},
     supportsJsonMode: true,
   };
+}
+
+// Anthropic Claude via the Messages API. Different wire shape from OpenAI:
+// system is a top-level param, the endpoint is /v1/messages, auth is x-api-key,
+// and Opus/Sonnet 4.x reject `temperature` — so chatCompletion has a dedicated
+// branch for kind === "anthropic" that drops it and reshapes the request.
+function anthropicProvider() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  return {
+    name: "Anthropic",
+    kind: "anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    apiKey,
+    model: process.env.ANTHROPIC_MODEL || "claude-opus-4-8",
+    headers: {},
+    supportsJsonMode: false, // no response_format; rely on prompt + parse
+  };
+}
+
+// Provider for public-bound content generation (posts, hashtags, ideas, tone
+// briefs). Prefer Anthropic Claude when configured, else OpenAI.
+function publicProvider() {
+  return anthropicProvider() || openaiProvider();
 }
 
 // On-prem DGX Spark (vLLM). Only reachable from inside the LAN/VPN.
@@ -52,11 +74,52 @@ function dgxProvider() {
 // Provider for source-based generation: prefer the internal cluster so source
 // documents stay on-prem; fall back to OpenAI if DGX isn't configured.
 function sourceProvider() {
-  return dgxProvider() || openaiProvider();
+  return dgxProvider() || publicProvider();
 }
 
-// Low-level OpenAI-compatible chat call against any provider.
+// Anthropic Messages API call. Lifts the system message to the top-level param,
+// keeps the user/assistant turns, and never sends temperature (rejected by
+// Opus/Sonnet 4.x). A floor on max_tokens keeps the OpenAI-tuned tiny budgets
+// from truncating Claude mid-output, and a final-answer instruction stops Opus
+// from leaking reasoning into the response when thinking is off. Maps the
+// result back to the {content, finishReason} shape the callers expect.
+async function anthropicCompletion(provider, { messages, maxTokens }) {
+  const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+  const turns = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content) }));
+  const sys = [system, "Respond with only the requested output: no preamble, and no explanation of your process."]
+    .filter(Boolean)
+    .join("\n");
+  const body = {
+    model: provider.model,
+    max_tokens: Math.max(maxTokens, 512),
+    system: sys,
+    messages: turns.length ? turns : [{ role: "user", content: "." }],
+  };
+  const res = await fetch(`${provider.baseUrl}/messages`, {
+    method: "POST",
+    headers: {
+      "x-api-key": provider.apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`${provider.name} request failed: ${res.status} ${errBody.slice(0, 400)}`);
+  }
+  const data = await res.json();
+  const content = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+  if (!content) throw new Error(`${provider.name} returned an empty response.`);
+  return { content, finishReason: data.stop_reason === "max_tokens" ? "length" : "stop" };
+}
+
+// Low-level chat call against any provider. OpenAI-compatible by default; routes
+// to the Anthropic Messages API for kind === "anthropic".
 async function chatCompletion(provider, { messages, temperature = 0.8, maxTokens = 800, jsonMode = false }) {
+  if (provider.kind === "anthropic") return anthropicCompletion(provider, { messages, maxTokens });
   const body = { model: provider.model, messages, temperature, max_tokens: maxTokens, ...(provider.extraBody || {}) };
   if (jsonMode && provider.supportsJsonMode) body.response_format = { type: "json_object" };
 
@@ -216,7 +279,7 @@ function tidyClippedTail(text) {
 // returned tags are appended AFTER generation, so they don't count toward the
 // post's length budget. Returns a space-separated string (or "" on failure).
 export async function generateHashtags({ text, provider, language, count = 3, sensitive = false } = {}) {
-  const tagProvider = provider || openaiProvider();
+  const tagProvider = provider || publicProvider();
   if (sensitive) return ""; // never tag a tragedy / somber post
   if (!tagProvider || !String(text || "").trim()) return "";
   const sys = [
@@ -559,17 +622,16 @@ export async function assessTopic(provider, { sourceText, voiceInstruction, exem
 
 // Generate a LinkedIn post. `topic` is what the post should be about.
 export async function generatePost({ topic, tone, audience, language, length, exemplars, modelOverride, archetype } = {}) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+  const base = publicProvider();
+  if (!base) {
+    throw new Error("No public LLM is configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
   }
   if (!topic || !String(topic).trim()) {
     throw new Error("A topic or prompt is required to generate a post.");
   }
 
-  // A per-author fine-tuned model id (modelOverride) takes precedence.
-  const base = openaiProvider();
-  const provider = modelOverride ? { ...base, model: modelOverride } : base;
+  // A per-author fine-tuned model id (modelOverride) applies only to OpenAI.
+  const provider = modelOverride && base.name === "OpenAI" ? { ...base, model: modelOverride } : base;
   const target = lengthTarget(length);
   let voiceSystem = buildSystemPrompt(resolveTone(tone), audience, language ? languageName(language) : null, target, exemplars);
   const arch = resolveArchetype(archetype);
@@ -594,7 +656,7 @@ export async function generatePost({ topic, tone, audience, language, length, ex
   best = best.slice(0, MAX_POST_LENGTH);
 
   // Hashtags via a separate request — always added, not counted in the length.
-  const tags = await generateHashtags({ text: best, provider: openaiProvider(), language });
+  const tags = await generateHashtags({ text: best, provider, language });
   return appendHashtags(best, tags);
 }
 
@@ -602,8 +664,8 @@ export async function generatePost({ topic, tone, audience, language, length, ex
 // ideas. Each idea = a real article + a best-fit archetype + a one-line human
 // angle. The user one-click drafts any idea. Returns [] when nothing fits.
 export async function suggestTopics({ focus, count = 5 } = {}) {
-  const provider = openaiProvider();
-  if (!provider) throw new Error("OPENAI_API_KEY is not configured.");
+  const provider = publicProvider();
+  if (!provider) throw new Error("No public LLM is configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
   const f = String(focus || "").trim();
   if (!f) throw new Error("A focus topic is required to suggest ideas.");
 
@@ -659,7 +721,7 @@ export async function generatePostsFromSource({
 } = {}) {
   // Provider routing: public material (news/URL) prefers OpenAI for quality;
   // confidential uploads keep generation on the on-prem cluster (sovereignty).
-  let provider = preferOpenAI ? openaiProvider() || sourceProvider() : sourceProvider();
+  let provider = preferOpenAI ? publicProvider() || sourceProvider() : sourceProvider();
   if (!provider) {
     throw new Error("No LLM is configured. Set DGX_BASE_URL/DGX_API_KEY (on-prem) or OPENAI_API_KEY.");
   }
@@ -724,16 +786,15 @@ export async function generatePostsFromSource({
 // Analyze example posts and distill a reusable tone-of-voice instruction that
 // the generator can later use verbatim. Returns a concise style brief.
 export async function learnToneFromExamples(samples) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+  const provider = publicProvider();
+  if (!provider) {
+    throw new Error("No public LLM is configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
   }
   const text = String(samples || "").trim();
   if (text.length < 80) {
     throw new Error("Paste at least one full example post (a bit more text) to learn a tone.");
   }
 
-  const model = process.env.OPENAI_MODEL || "gpt-4o";
   const systemPrompt = [
     "You are a writing-style analyst. You are given one or more real LinkedIn posts written by the same person.",
     "Produce a precise, reusable TONE-OF-VOICE BRIEF that another writer could follow to reproduce this exact voice on new topics.",
@@ -741,32 +802,13 @@ export async function learnToneFromExamples(samples) {
     "Write the brief as direct instructions to the writer (imperative voice). Do NOT summarize the topics or quote the posts. Do NOT include a preamble. 120-220 words.",
   ].join("\n");
 
-  const res = await fetch(COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Here are the example posts:\n\n${text.slice(0, 12000)}` },
-      ],
-      temperature: 0.4,
-      max_tokens: 600,
-    }),
+  const { content } = await chatCompletion(provider, {
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Here are the example posts:\n\n${text.slice(0, 12000)}` },
+    ],
+    temperature: 0.4,
+    maxTokens: 600,
   });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`OpenAI request failed: ${res.status} ${errBody.slice(0, 500)}`);
-  }
-
-  const data = await res.json();
-  const instruction = data.choices?.[0]?.message?.content?.trim();
-  if (!instruction) {
-    throw new Error("OpenAI returned an empty tone analysis.");
-  }
-  return instruction.slice(0, 4000);
+  return content.slice(0, 4000);
 }

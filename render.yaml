@@ -37,7 +37,12 @@ services:
       # which both wakes the service and publishes due posts.
       - key: PUBLISH_SCHEDULER
         value: "off"
-      # AI drafting / tone features.
+      # AI drafting / tone features. Claude is preferred when ANTHROPIC_API_KEY
+      # is set; OpenAI is the fallback.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-4-8
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
